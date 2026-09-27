@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>بوابة ولي الأمر — سجل درجات الطلاب</title>
+<style>
+  body{font:16px Tahoma,Arial;background:#f4f7f5;color:#193d34;margin:0;padding:20px}
+  header{background:#205348;color:#fff;padding:18px 20px;border-radius:12px;margin-bottom:16px}
+  section{background:#fff;border:1px solid #d6e3dd;border-radius:10px;padding:16px;margin:12px 0;max-width:640px}
+  button,input{font:inherit;padding:9px;margin:4px 0;border:1px solid #aac1b4;border-radius:7px;width:100%;box-sizing:border-box}
+  button{cursor:pointer;background:#205348;color:#fff;border-color:#205348}
+  button.secondary{background:#fff;color:#205348}
+  .muted{font-size:13px;color:#526b60}
+  .error{color:#b42318;font-weight:bold}
+  .card{background:#f7faf8;border:1px solid #d6e3dd;border-radius:9px;padding:12px;margin:10px 0}
+  table{border-collapse:collapse;width:100%;margin-top:8px}
+  th,td{border:1px solid #d6e3dd;padding:6px;text-align:center;font-size:14px}
+  th{background:#e9f1ed}
+  h3{margin-top:0}
+  .tabs{display:flex;gap:8px;margin-bottom:10px}
+  .tabs button{width:auto;flex:1}
+  .tabs button.active{background:#193d34}
+</style>
+<body>
+<header><h2 style="margin:0">بوابة ولي الأمر</h2><span class="muted" style="color:#dfeee8">متابعة درجات ابنك أولاً بأول</span></header>
+
+<section id="authBox"></section>
+<section id="reportsBox" style="display:none"></section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ============================================================
+// عبّئ نفس القيمتين المستخدمتين في parent-sync.js:
+// ============================================================
+const SUPABASE_URL = 'https://bobjfngkrepajfsmaihk.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_tlHAjfYiVXXq81ponT7E-g_fniIquBM';
+// ============================================================
+
+let supa = null;
+const authBox = document.getElementById('authBox');
+const reportsBox = document.getElementById('reportsBox');
+const urlCode = new URLSearchParams(location.search).get('code');
+
+function periodLabel(i){return i===0?'الأولى':'الثانية'}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function renderQuran(rows){
+  if(!rows) return '';
+  const trs = rows.map(r=>`<tr><td>الفترة ${periodLabel(r.period-1)}</td><td>${r.complete?(r.periodScore??'—'):'غير مكتمل بعد'}</td><td>${r.approved?'معتمدة':'غير معتمدة بعد'}</td></tr>`).join('');
+  return `<div class="card"><b>القرآن الكريم</b><table><tr><th>الفترة</th><th>النتيجة</th><th>الحالة</th></tr>${trs}</table></div>`;
+}
+function renderCourse(title, rows){
+  if(!rows) return '';
+  const trs = rows.map(r=>`<tr><td>الفترة ${periodLabel(r.period-1)}</td><td>${r.complete?(r.scaled+' / '+r.target):'غير مكتمل بعد'}</td><td>${r.stars}</td></tr>`).join('');
+  return `<div class="card"><b>${title}</b><table><tr><th>الفترة</th><th>النتيجة</th><th>نجوم التميّز</th></tr>${trs}</table></div>`;
+}
+
+function renderStudentCard(row){
+  const rep = row.report || {};
+  const updated = rep.generatedAt ? new Date(rep.generatedAt).toLocaleString('ar') : 'لم تُحدَّث بعد';
+  return `<section>
+    <h3>${escapeHtml(row.full_name)}</h3>
+    <p class="muted">آخر تحديث: ${updated}</p>
+    ${renderQuran(rep.quran)}
+    ${renderCourse('الدراسات الإسلامية', rep.islamic)}
+    ${renderCourse('التجويد', rep.tajweed)}
+    ${!rep.quran && !rep.islamic && !rep.tajweed ? '<p class="muted">لم يقم المعلم بمزامنة أي تقرير بعد.</p>' : ''}
+  </section>`;
+}
+
+async function showReports(){
+  authBox.style.display = 'none';
+  reportsBox.style.display = 'block';
+  reportsBox.innerHTML = '<p class="muted">جارٍ التحميل...</p>';
+
+  if(urlCode){
+    const { error } = await supa.rpc('redeem_link_code', { p_code: urlCode });
+    history.replaceState(null, '', location.pathname);
+    if(error){
+      reportsBox.innerHTML = `<section><p class="error">تعذّر ربط الحساب: ${escapeHtml(error.message)}</p></section>`;
+      return;
+    }
+  }
+
+  const { data, error } = await supa.from('students_public').select('*');
+  if(error){
+    reportsBox.innerHTML = `<section><p class="error">تعذّر جلب البيانات: ${error.message}</p></section>`;
+    return;
+  }
+  if(!data.length){
+    reportsBox.innerHTML = '<section><p class="muted">لا يوجد أي طالب مرتبط بحسابك بعد. استخدم رابط/باركود الطالب الذي أعطاك إياه المعلم.</p></section>';
+  } else {
+    reportsBox.innerHTML = data.map(renderStudentCard).join('');
+  }
+  const logout = document.createElement('button');
+  logout.textContent = 'تسجيل الخروج';
+  logout.className = 'secondary';
+  logout.onclick = async () => { await supa.auth.signOut(); location.reload(); };
+  reportsBox.appendChild(logout);
+}
+
+function renderAuthForm(mode){
+  authBox.innerHTML = `
+    <section>
+      <div class="tabs">
+        <button id="tabLogin" class="${mode==='login'?'active':''}" type="button">لديّ حساب</button>
+        <button id="tabSignup" class="${mode==='signup'?'active':''}" type="button">حساب جديد</button>
+      </div>
+      ${urlCode ? '<p class="muted">تم رصد رمز طالب في الرابط، سيُربط بحسابك بعد تسجيل الدخول/إنشاء الحساب.</p>' : ''}
+      <input id="paEmail" type="email" placeholder="البريد الإلكتروني">
+      <input id="paPass" type="password" placeholder="كلمة المرور">
+      <button id="paSubmit" type="button">${mode==='login'?'تسجيل الدخول':'إنشاء الحساب'}</button>
+      <p id="paMsg" class="error"></p>
+    </section>`;
+  document.getElementById('tabLogin').onclick = () => renderAuthForm('login');
+  document.getElementById('tabSignup').onclick = () => renderAuthForm('signup');
+  document.getElementById('paSubmit').onclick = async () => {
+    const email = document.getElementById('paEmail').value.trim();
+    const password = document.getElementById('paPass').value;
+    const msg = document.getElementById('paMsg');
+    if(!email || !password){ msg.textContent = 'أدخل البريد وكلمة المرور.'; return; }
+    msg.textContent = 'جارٍ المعالجة...'; msg.classList.remove('error');
+    const fn = mode === 'login' ? supa.auth.signInWithPassword : supa.auth.signUp;
+    const { error } = await fn.call(supa.auth, { email, password });
+    if(error){ msg.textContent = error.message; msg.classList.add('error'); return; }
+    if(mode === 'signup'){
+      msg.textContent = 'إذا طُلب تأكيد البريد، افتح الرابط المُرسَل إليك ثم أعد فتح هذه الصفحة (نفس رابط الباركود إن وُجد).';
+      return;
+    }
+    showReports();
+  };
+}
+
+(async () => {
+  if(/^ضع_/.test(SUPABASE_URL) || /^ضع_/.test(SUPABASE_ANON_KEY)){
+    authBox.innerHTML = '<section><p class="error">لم تُعبَّأ إعدادات Supabase في هذا الملف بعد.</p></section>';
+    return;
+  }
+  try{
+    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }catch(err){
+    authBox.innerHTML = '<section><p class="error">تعذّر الاتصال بـ Supabase: ' + err.message + '</p></section>';
+    return;
+  }
+  const { data } = await supa.auth.getSession();
+  if(data.session) showReports(); else renderAuthForm(urlCode ? 'signup' : 'login');
+})();
+</script>
+</body></html>
