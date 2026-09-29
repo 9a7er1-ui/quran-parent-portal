@@ -80,6 +80,7 @@ function snapshotOf(db) {
 
 function trackChange(db) {
   const meta = loadJSON(META_KEY, emptyMeta());
+  for (const b of [...BUCKETS, 'students']) if (!meta[b]) meta[b] = {};
   const prev = loadJSON(SNAP_KEY, null);
   const cur = snapshotOf(db);
   const now = Date.now();
@@ -119,12 +120,14 @@ async function syncDevices(statusEl) {
   // أما الجهاز الذي يدخل المزامنة لأول مرة فلا نضع على بياناته القديمة طابع «الآن» كي لا يتغلب خطأً على سحابة أحدث.
   if (hadPreviousSnapshot) trackChange(db);
   let localMeta = loadJSON(META_KEY, emptyMeta());
+  for (const b of [...BUCKETS, 'students']) if (!localMeta[b]) localMeta[b] = {};
   const localSnap = snapshotOf(db);
 
   const { data, error } = await supa.from('gradebook_state').select('*').eq('id', 'main').maybeSingle();
   if (error) { statusEl.textContent = 'خطأ في الجلب: ' + error.message; return; }
   const remoteSnap = (data && data.db) || {};
   const remoteMeta = (data && data.meta) || emptyMeta();
+  for (const b of [...BUCKETS, 'students']) if (!remoteMeta[b]) remoteMeta[b] = {};
 
   // أول جهاز يرفع إلى سحابة فارغة هو مصدر البداية الموثوق: نعطي قيمه الحالية طوابع تأسيسية.
   // بعد ذلك، أي جهاز جديد بلا لقطة سابقة يعامل بياناته القديمة كإرث أقدم من بيانات السحابة ولا يستطيع إحياء نسخة قديمة.
