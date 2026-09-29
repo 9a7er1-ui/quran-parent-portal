@@ -1,0 +1,677 @@
+<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>سجل درجات الطلاب</title><link rel="manifest" href="./manifest.webmanifest"><meta name="theme-color" content="#205348"><link rel="apple-touch-icon" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="كشف القرآن"><script>if('serviceWorker' in navigator && location.protocol !== 'file:'){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}</script><style>body{font:16px Tahoma,Arial;background:#f4f7f5;color:#193d34;margin:20px}header{background:#205348;color:white;padding:20px;border-radius:12px}section{background:white;border:1px solid #d6e3dd;border-radius:10px;padding:15px;margin:12px 0}button,input,select{font:inherit;padding:8px;margin:3px;border:1px solid #aac1b4;border-radius:7px}button{cursor:pointer}details.review-fold{border:1px solid #d6e3dd;border-radius:9px;margin:10px 0;padding:8px 12px}details.review-fold>summary{cursor:pointer;font-weight:bold;padding:8px;user-select:none}details.review-fold:not([open])>summary{margin:0}details.review-fold[open]>summary{border-bottom:1px solid #d6e3dd;margin-bottom:8px}.scope-control{display:inline-block;margin:4px 12px 4px 0}.scope-control select{min-width:145px}.student-move{padding:5px 9px;margin-inline-start:4px}.student-move:disabled{opacity:.35;cursor:default}.import-preview{border:1px solid #d6e3dd;border-radius:8px;padding:10px;margin-top:10px}.import-preview textarea{box-sizing:border-box;width:100%;min-height:180px;direction:rtl;font:inherit;padding:8px}.student-delete{color:#b42318;border-color:#b42318;background:#fff4f3;margin-inline-start:8px}nav button.active{background:#205348;color:white}.hide{display:none}table{border-collapse:collapse;width:100%;min-width:720px}th,td{border:1px solid #d6e3dd;padding:6px;text-align:center}th{background:#e9f1ed}.scroll{overflow:auto}.absent{background:#eee;color:#b42318}.early{background:#f1e5ff;color:#6b21a8}.late{background:#e4eeff;color:#1d4ed8}.modified{background:#ffedda;color:#9a3412}.cell{min-width:65px}.delete-grade{background:#fff1f0;color:#b42318;border:1px solid #b42318;font-size:10px;font-weight:normal;padding:2px 5px;margin:2px;border-radius:4px;line-height:1.2}.approval-blocked{background:#fff5f4;color:#b42318;border:1px solid #b42318;font-size:10px;font-weight:normal;padding:2px 5px;margin:0;border-radius:5px;line-height:1.2}.approval-blocked:hover{background:#ffe9e6}.approval-action{font-size:10px;font-weight:normal;padding:2px 5px;margin:0;border-radius:5px;line-height:1.2}.approval-warning{display:block;color:#b42318;font-size:10px;font-weight:normal;line-height:1.4;margin-top:3px}.approval-star{color:#b42318;font-size:12px;line-height:1;margin-inline-start:4px}.approval-controls{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin-inline-start:5px}.approval-top{display:inline-flex;align-items:center;gap:3px}#status.error{color:#b42318}.muted{font-size:12px;color:#526b60}#status{font-weight:bold}@media print{header,nav,.no-print,#status{display:none!important}section{border:0}#report{display:block!important}}.grade-stack{display:flex;flex-direction:column;align-items:center;gap:3px}.grade-badge{display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;direction:rtl;padding:6px 9px}.grade-value{font-weight:bold;font-size:18px}.grade-status{font-size:12px}.grade-star{color:#c68b00;font-size:16px}.grade-actions{display:flex;justify-content:center;gap:4px;direction:rtl}.grade-action{display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;min-width:23px;padding:0;margin:0;border-radius:50%;font-size:12px;font-weight:bold;line-height:1}.action-delete{color:#b42318;border-color:#b42318;background:#fff4f3}.action-edit{color:#1d4ed8;border-color:#1d4ed8;background:#edf4ff}.action-star{color:#946200;border-color:#d19a26;background:#fff7df}.action-star.selected{background:#ffe3a1}.grade-editor{width:46px;padding:4px;text-align:center}.grade-cell{min-width:110px}@media print{.grade-actions{display:none!important}}.course-input{width:54px;text-align:center;padding:5px}.course-title{margin-top:16px}.summary-card{background:#f7faf8;border:1px solid #d6e3dd;border-radius:9px;padding:10px;margin:8px 0}.scope-control{margin-inline-end:10px}.combined-ok{font-weight:bold}
+.course-grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:12px 0}
+.course-panel{border:1px solid #d9e4df;border-radius:10px;padding:8px;min-width:0;background:#fff}
+.course-panel h4{margin:3px 0 8px;text-align:center}
+.course-panel .scroll{margin:0}
+.course-panel table{min-width:0;width:100%;font-size:13px}
+.course-panel th,.course-panel td{padding:3px 2px}
+.course-panel th:first-child,.course-panel td:first-child{min-width:112px}
+.mark-stack{display:flex;flex-direction:column;align-items:center;gap:2px}
+.mark-btn{width:30px;min-width:30px;height:27px;padding:0;font-weight:700}
+.mark-grade{min-width:34px;height:27px;padding:0 4px;font-weight:700}
+.mark-actions{display:flex;gap:2px;justify-content:center}
+.mark-action{width:20px;min-width:20px;height:20px;padding:0;border-radius:50%;font-size:10px;font-weight:700}
+.mark-del{color:#b42318;border-color:#b42318;background:#fff}
+.mark-star{color:#8a6500;border-color:#c99a22;background:#fff8df}
+.mark-star.on{background:#ffd86b}
+.mark-x{color:#b42318;font-size:18px}
+.star-total{font-weight:700;color:#7a5b00}
+@media(max-width:1100px){.course-grid2{grid-template-columns:1fr}}
+@media print{.mark-actions{display:none!important}}
+
+.unified-course{margin:12px 0}.unified-course table{width:100%;min-width:980px;font-size:13px}.unified-course th,.unified-course td{padding:4px 3px;text-align:center}.unified-course .name-col{text-align:right;min-width:165px;position:sticky;right:0;background:#fff;z-index:1}.unified-course .group-start{border-right:4px solid #6f8f83!important}.unified-course .group-title{font-weight:700;background:#f4f8f6}.direct-grade{width:43px;padding:4px;text-align:center}.group-report{width:100%;border-collapse:collapse}.group-report th,.group-report td{padding:7px;border:1px solid #d7e1dd;text-align:center}.group-report th{background:#f3f7f5}.report-scroll{overflow:auto}.report-table{min-width:850px}
+
+/* تمييز صفوف الطلاب بالتناوب في جميع الجداول */
+table tbody tr:nth-child(odd) td{background:#ffffff}
+table tbody tr:nth-child(even) td{background:#f7faf8}
+table tbody tr:hover td{background:#e8f4ed}
+table tbody tr:nth-child(odd) td.name-col{background:#ffffff}
+table tbody tr:nth-child(even) td.name-col{background:#f7faf8}
+table tbody tr:hover td.name-col{background:#e8f4ed}
+/* الجداول التي لا تحتوي tbody */
+.group-report tr:nth-child(even) td{background:#ffffff}
+.group-report tr:nth-child(odd):not(:first-child) td{background:#f7faf8}
+.group-report tr:hover td{background:#e8f4ed}
+
+/* توحيد المحاذاة البصرية بين الجداول */
+.unified-course table{table-layout:fixed}
+.unified-course th:first-child,.unified-course td:first-child,
+.unified-course .name-col{width:190px!important;min-width:190px!important;max-width:190px!important}
+.unified-course .group-title{position:relative;padding-top:7px;padding-bottom:7px}
+.group-note{display:block;font-size:10px;font-weight:400;line-height:1.25;margin-top:2px;opacity:.72;white-space:nowrap}
+.register-note{font-size:10px;font-weight:400;opacity:.72;margin-inline-start:6px}
+
+.course-guide{font-size:12px;color:#49695e;margin:10px 4px 5px;text-align:right;line-height:1.6}
+
+/* تحسين جداول رصد الدرجات: تقارب الخانات ومنع خروج كلمة المجموع */
+.unified-course table{table-layout:auto!important;width:max-content!important;min-width:100%!important}
+.unified-course th,.unified-course td{white-space:nowrap}
+.unified-course th:first-child,.unified-course td:first-child,
+.unified-course .name-col{width:190px!important;min-width:190px!important;max-width:190px!important}
+.unified-course thead tr:nth-child(2) th:not(:first-child),
+.unified-course tbody td:not(:first-child){width:48px;min-width:48px;max-width:48px}
+.unified-course thead tr:nth-child(2) th:last-child,
+.unified-course tbody td:last-child{width:72px!important;min-width:72px!important;max-width:72px!important}
+
+
+/* المواد غير القرآن: تصغير الخانات والمحافظة على استقامة الفاصل الأخضر */
+#courseBody .unified-course table{border-collapse:collapse!important;table-layout:auto!important}
+#courseBody .unified-course thead tr:nth-child(2) th:not(:first-child),
+#courseBody .unified-course tbody td:not(:first-child){width:40px!important;min-width:40px!important;max-width:40px!important}
+#courseBody .unified-course thead tr:nth-child(2) th:last-child,
+#courseBody .unified-course tbody td:last-child{width:66px!important;min-width:66px!important;max-width:66px!important}
+#courseBody .unified-course .group-start{border-right:4px solid #6f8f83!important}
+#courseBody .mark-stack{gap:0!important}
+#courseBody .mark-actions{height:20px}
+
+
+/* قسم مستقل للخدمات الإدارية وأولياء الأمور */
+.nav-admin-separator{
+  flex-basis:100%;height:0;border-top:2px solid #b8cec3;margin:10px 0 4px!important;padding:0!important;
+}
+.nav-admin-title{
+  flex-basis:100%;font-weight:800;font-size:18px;color:#174c3d;
+  background:#eaf3ef;border:1px solid #c8dcd3;border-radius:9px;padding:9px 12px!important;margin:0 0 5px!important;
+}
+.admin-nav-btn{background:#f3f8f6!important;border-color:#a9c4b8!important;font-weight:700}
+
+
+#tabs .tab-section-title{
+  flex-basis:100%;display:block;box-sizing:border-box;
+  margin:10px 0 4px;padding:8px 12px;border-radius:9px;
+  background:#eaf3ef;border:1px solid #c8dcd3;
+  color:#174c3d;font-weight:800;font-size:16px;text-align:right;
+}
+#tabs .tab-section-title:first-child{margin-top:0}
+
+.main-areas{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 8px;padding:10px;border:1px solid #d9e4df;border-radius:12px;background:#f7faf8}
+.main-areas button{font-size:15px;font-weight:700;padding:10px 16px}
+.main-areas button.active{background:#176b4d;color:#fff;border-color:#176b4d}
+
+.student-stats{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.student-stat{background:#f4f8f6;border:1px solid #cdded6;border-radius:9px;padding:7px 11px;font-weight:700}
+.student-filters{margin:7px 0 12px}
+#students .student-row{border-bottom:1px solid #edf2ef;padding:7px 0;margin:0}
+
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:10px 0}
+.dashboard-card{border:1px solid #d7e2dc;border-radius:12px;padding:12px;background:#fafcfb}
+.dashboard-card b{display:block;font-size:1.25rem;margin-top:4px}
+.dashboard-warn{border-right:4px solid #b7791f}
+.student-search{margin:10px 0}.student-search input{min-width:260px}
+.student-profile-card{border:1px solid #cfded6;border-radius:12px;padding:12px;margin:10px 0;background:#fbfdfc}
+.student-profile-table{width:100%;border-collapse:collapse}.student-profile-table td,.student-profile-table th{border:1px solid #ddd;padding:6px}
+.history-item{padding:6px 4px;border-bottom:1px solid #eee}.history-time{font-size:.85em;color:#666}
+.archive-list{margin-top:10px}.archive-item{padding:6px;border-bottom:1px solid #eee}
+.student-name-link{background:none!important;border:0!important;padding:0!important;margin:0!important;color:#0b6b4b!important;text-decoration:underline;font:inherit;font-weight:700;cursor:pointer}
+.students-table{width:100%;border-collapse:collapse;margin-top:12px}
+.students-table th,.students-table td{border:1px solid #d7e2dc;padding:8px;text-align:center;vertical-align:middle}
+.students-table th{background:#eef5f1;white-space:nowrap}
+.students-table .student-col{text-align:right;min-width:220px}
+.students-table select,.students-table button{margin:0;max-width:100%}
+.student-name-link{font-size:1rem}
+@media(max-width:900px){.students-table{min-width:920px}.students-table-wrap{overflow:auto}}
+
+.students-table{width:100%;border-collapse:collapse;table-layout:auto}
+.students-table th,.students-table td{border:1px solid #d7e2dc;padding:8px;text-align:center;vertical-align:middle;white-space:nowrap}
+.students-table th{background:#eef5f1}
+.students-table .student-col{text-align:right;min-width:245px}
+.students-table-wrap{width:100%;overflow-x:auto}
+.students-table select,.students-table button{margin:0}
+</style><header><h2>سجل درجات الطلاب</h2>متوسطة ذي النورين لتحفيظ القرآن الكريم — نسخة محلية تجريبية</header><section class="no-print"><b>الموعد الدراسي الفعلي:</b> <span id="actual"></span><br><b>الكشف المعروض:</b> <span id="view"></span></section><nav id="mainAreas" class="main-areas no-print" aria-label="الأقسام الرئيسية">
+<button type="button" data-area="dashboard">لوحة المتابعة</button><button type="button" data-area="students">الطلاب</button><button type="button" data-area="study">الدرجات</button>
+<button type="button" data-area="parents">أولياء الأمور</button>
+<button type="button" data-area="data">إدارة البيانات</button>
+</nav><nav id="tabs" class="no-print"></nav><section id="scope" class="no-print"><label class="scope-control">المادة <select id="subjectSelect"><option value="quran">القرآن الكريم</option><option value="islamic">الدراسات الإسلامية</option><option value="tajweed">التجويد</option><option value="life">المهارات الحياتية</option></select></label><label class="scope-control">الشعبة <select id="sectionSelect"></select></label><span id="scopeNote" class="muted"></span></section><section id="dashboard" class="hide"><h3>لوحة المتابعة</h3>
+<p class="muted">ملخص سريع لحالة الشعب والرصد. هذه اللوحة للمتابعة أثناء التطوير ولا تغيّر أي درجة.</p>
+<div id="dashboardBody"></div></section><section id="register"><h3>كشف التسميع</h3><p class="muted"></p><div class="scroll"><table><thead id="head"></thead><tbody id="body"></tbody></table></div></section><section id="calendar" class="hide"><h3>التقويم والإجازات</h3><p class="muted">حدد الفصل والفترة والأسبوع من «الكشف المعروض» أعلاه، ثم عيّن أيام الإجازة. تُستبعد الإجازة من عدد الدروس المطلوبة بلا تعويض. لا يمكن اعتماد إجازة في يوم يحتوي على درجات أو غياب قبل مراجعة تلك السجلات؛ لن تُحذف بيانات الطلاب تلقائيًا.</p><div id="calendarDays"></div><p id="calendarNote" class="muted"></p></section><section id="students" class="hide"><h3>الطلاب</h3><div class="no-print"><input id="newSection" placeholder="اسم الشعبة الجديدة"><button id="createSection" type="button">إنشاء شعبة</button></div><p id="studentsScope" class="muted"></p>
+<div id="studentStats" class="student-stats no-print"></div>
+<div class="student-filters no-print">
+<label>عرض الطلاب <select id="studentStatusFilter">
+<option value="active">النشطون</option>
+<option value="withdrawn">المنسحبون</option>
+<option value="all">الجميع</option>
+</select></label>
+</div>
+<input id="newName" placeholder="اسم الطالب"><button id="add">إضافة طالب</button><div class="no-print"><label>استيراد أسماء الطلاب من Excel أو Word <input id="namesFile" type="file" accept=".xlsx,.docx,.csv,.txt"></label><p class="muted">تُقبل ملفات Excel ‏(.xlsx) وWord ‏(.docx)، وكذلك CSV وTXT. إذا كان الملف بصيغة .xls أو .doc فاحفظه أولًا بالصيغة الحديثة. لن تُضاف الأسماء قبل تأكيدك.</p><div id="namesPreview" class="import-preview hide"><p id="namesPreviewInfo"></p><textarea id="namesText" aria-label="معاينة أسماء الطلاب وتعديلها" spellcheck="false"></textarea><br><button id="confirmNames" type="button">إضافة الأسماء المعروضة</button><button id="cancelNames" type="button">إلغاء الاستيراد</button></div></div><div class="student-search no-print"><label>بحث سريع عن طالب <input id="studentSearch" placeholder="اكتب جزءًا من الاسم"></label></div>
+<div id="studentSearchResults"></div>
+<div id="studentProfile" class="hide"></div>
+<details id="studentHistoryBox"><summary>سجل حركة الطلاب والتعديلات</summary><div id="studentHistory"></div></details>
+<div id="studentList"></div></section><section id="tests" class="hide"><h3>الاختبارات</h3><p>درجة الاختبار من ٠ إلى ١٠ بفواصل نصف درجة.</p><div class="scroll"><table><thead><tr><th>الطالب</th><th>الفترة الأولى</th><th>الفترة الثانية</th></tr></thead><tbody id="testBody"></tbody></table></div></section><section id="review" class="hide"><h3>مراجعة الفترة المعروضة واعتمادها</h3><p class="muted">عند اعتماد فترة طالب: الغياب غير المعوّض = صفر في الدرس المطلوب، والخانات الفارغة تمنع الاعتماد. يجب إدخال الاختبار أولًا. يمكن إعادة فتح الفترة لتصحيح السجلات.</p><details class="review-fold"><summary id="reviewSummary">الخانات التي تحتاج إلى مراجعة — اضغط السهم للعرض</summary><div id="reviewBody"></div></details><details class="review-fold"><summary id="approvalSummary">اعتماد نتائج الطلاب للفترة المعروضة — اضغط السهم للعرض</summary><div id="approvalBody"></div></details></section><section id="report" class="hide"><h3>التقرير الجماعي للفصل المعروض — النتائج النهائية بعد الاعتماد</h3><div class="no-print">نصيب القرآن من مجموع ١٠٠ <select id="max"><option>40</option><option selected>50</option><option>60</option></select><button id="csv">تنزيل CSV لفتحه في Excel</button><button id="print">طباعة / حفظ PDF</button></div><div class="scroll"><table><thead><tr><th>الطالب</th><th>مرصود / الدروس المطلوبة</th><th>غياب</th><th>نجوم التميّز ★</th><th>مرات التسميع المبكر</th><th>خانات حلّ موعدها ولم تُرصد</th><th>تسميع الأولى /١٥</th><th>اختبار الأولى /١٠</th><th>نتيجة القرآن الأولى</th><th>تسميع الثانية /١٥</th><th>اختبار الثانية /١٠</th><th>نتيجة القرآن الثانية</th><th>متوسط القرآن في الفصل</th></tr></thead><tbody id="reportBody"></tbody></table></div><p class="muted">(*) متوسط مؤقت للدروس المرصودة فقط. عمود «خانات حلّ موعدها ولم تُرصد» لا يشمل الخانات المستقبلية ولا الغياب المسجل. أما «الفارغ» في قسم الاعتماد فيشمل جميع الخانات المطلوبة غير المحسومة، بما فيها المستقبلية.  لا تُحتسب الإجازات ضمن الدروس المطلوبة. لا تظهر نتيجة الفترة النهائية إلا بعد حسم جميع الخانات المطلوبة وإدخال الاختبار واعتماد الفترة؛ ويُحسب الغياب غير المعوّض صفرًا عند الاعتماد.</p></section>
+<section id="coursework" class="hide">
+<h3 id="courseTitle">درجات المادة</h3>
+<p id="courseNote" class="muted"></p>
+<div id="courseBody"></div>
+</section>
+<section id="islamicReport" class="hide"><h3>تقرير الدراسات الإسلامية فقط</h3><div id="islamicReportBody"></div></section>
+<section id="tajweedReport" class="hide"><h3>تقرير التجويد</h3><div id="tajweedReportBody"></div></section><div id="lifeGuideGlobal" class="hide">المهارات الحياتية: المشاركة والواجبات والبحوث والمشروعات والتقارير والتطبيقات والأنشطة الصفية تُرصد بعلامة ✓ فتُحتسب الدرجة الكاملة للخانة، والاختبارات فقط تُرصد بالدرجة.</div><section id="lifeReport" class="hide"><h3>تقرير المهارات الحياتية</h3><div id="lifeReportBody"></div></section>
+<section id="combined" class="hide">
+<h3>الدراسات الإسلامية + القرآن الكريم</h3>
+<p class="muted">هذا التقرير يجمع الدراسات الإسلامية مع القرآن الكريم فقط، ليكون المجموع ١٠٠ في كل فترة.</p>
+<div id="combinedBody"></div>
+</section>
+<section id="groupAssessment" class="hide"><h3>التقويم الجماعي</h3><p class="muted">عرض منظم لنتائج الطلاب في الفترة الحالية.</p><div id="groupAssessmentBody"></div></section><section id="syncDevices" class="hide"><h3>مزامنة الأجهزة</h3><div id="syncDevicesBody"></div></section><section id="parentPortal" class="hide"><h3>بوابة أولياء الأمور</h3><div id="parentPortalBody"></div></section><section id="parentMessages" class="hide"><h3>رسائل أولياء الأمور</h3><div id="parentMessagesBody"></div></section><section id="backup" class="hide"><h3>النسخ الاحتياطي</h3><p>قبل استيراد نسخة قديمة، نزّل نسخة احتياطية من بياناتك الحالية. احفظ ملف JSON بعد كل جلسة. يحتوي الملف على أسماء الطلاب ودرجات القرآن والدراسات الإسلامية والتجويد والمهارات الحياتية؛ احتفظ به في مكان آمن. المزامنة السحابية لا تستبدل النسخة الاحتياطية؛ احتفظ بملف JSON دوريًا.</p><button id="download">تنزيل نسخة احتياطية JSON</button>
+<button id="archiveYear" type="button">أرشفة نسخة من العام الدراسي</button>
+<div id="archiveList" class="archive-list"></div><label>استيراد نسخة <input id="import" type="file" accept=".json,application/json"></label><p class="muted">الاستيراد يستبدل البيانات الحالية بعد التأكيد.</p></section><p id="status"></p><script>
+(()=>{'use strict';const $=x=>document.getElementById(x),days=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'],weeks=['الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع'],storage='quran-offline-v1';const empty=()=>({version:1,students:[],grades:{},absences:{},tests:{},holidays:{},approvals:{},actual:{t:0,p:0,w:0,d:0},view:{t:0,p:0,w:0},max:50,sections:['أول متوسط ٥','أول متوسط ٦'],activeSection:'أول متوسط ٥',activeSubject:'quran',coursework:{},quranShare:50,auditLog:[],archives:[],lastBackupAt:'',studentSupport:{}});let db=empty(),tab='register',edit='',storageOK=true;const e=(tag,txt)=>{let x=document.createElement(tag);if(txt!==undefined)x.textContent=txt;return x},key=(t,p,w,d,id)=>[t,p,w,d,id].join('|'),tk=(t,p,id)=>[t,p,id].join('|'),pos=(t,p,w,d)=>(((t*2+p)*7+w)*5+d),now=()=>pos(db.actual.t,db.actual.p,db.actual.w,db.actual.d),testDay=(w,d)=>w===6&&d===4,normal=x=>String(x).replace(/[٠-٩]/g,c=>c.charCodeAt(0)-1632).replace(/[۰-۹]/g,c=>c.charCodeAt(0)-1776).replace(/[٫،]/g,'.');function valid(x){return x&&x.version===1&&Array.isArray(x.students)&&x.students.every(s=>typeof s.id==='string'&&typeof s.name==='string')&&x.grades&&typeof x.grades==='object'&&x.absences&&typeof x.absences==='object'&&x.tests&&typeof x.tests==='object'&&x.actual&&x.view&&[0,1].includes(x.actual.t)&&[0,1].includes(x.actual.p)&&Number.isInteger(x.actual.w)&&x.actual.w>=0&&x.actual.w<=6&&Number.isInteger(x.actual.d)&&x.actual.d>=0&&x.actual.d<=4&&[0,1].includes(x.view.t)&&[0,1].includes(x.view.p)&&Number.isInteger(x.view.w)&&x.view.w>=0&&x.view.w<=6}try{const s=localStorage.getItem(storage);if(s){const x=JSON.parse(s);if(valid(x))db=x}db.holidays=db.holidays||{};db.approvals=db.approvals||{};db.sections=Array.isArray(db.sections)&&db.sections.length?db.sections:['أول متوسط ٥','أول متوسط ٦'];db.activeSection=db.sections.includes(db.activeSection)?db.activeSection:db.sections[0];db.activeSubject=['quran','islamic','tajweed','life'].includes(db.activeSubject)?db.activeSubject:'quran';db.coursework=db.coursework||{};db.auditLog=Array.isArray(db.auditLog)?db.auditLog:[];db.archives=Array.isArray(db.archives)?db.archives:[];db.lastBackupAt=db.lastBackupAt||'';db.studentSupport=db.studentSupport||{};db.quranShare=[40,50,60].includes(Number(db.quranShare))?Number(db.quranShare):50;for(const s of db.students){if(!s.subject)s.subject='quran';if(!s.section)s.section=db.sections[0]};backfillStudentUids(db);resolveAbsenceConflicts(db);localStorage.setItem(storage,JSON.stringify(db))}catch(_){storageOK=false}function resolveAbsenceConflicts(data){let removed=0;for(const k of Object.keys(data.absences)){if(data.absences[k]&&Object.prototype.hasOwnProperty.call(data.grades,k)){delete data.grades[k];removed++}}return removed}
+function uid(){return crypto.randomUUID?crypto.randomUUID():'uid-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
+function ensureStudentUid(s,all){if(s.studentUid)return s.studentUid;const name=cleanName(s.name),section=s.section||db.sections[0];const match=all.find(o=>o!==s&&o.studentUid&&cleanName(o.name)===name&&(o.section||db.sections[0])===section);s.studentUid=match?match.studentUid:uid();return s.studentUid}
+function backfillStudentUids(data){for(const s of data.students)if(!s.studentUid)ensureStudentUid(s,data.students)}function migrate(data){data.holidays=data.holidays||{};data.approvals=data.approvals||{};data.sections=Array.isArray(data.sections)&&data.sections.length?data.sections:['أول متوسط ٥','أول متوسط ٦'];data.activeSection=data.sections.includes(data.activeSection)?data.activeSection:data.sections[0];data.activeSubject=['quran','islamic','tajweed','life'].includes(data.activeSubject)?data.activeSubject:'quran';data.coursework=data.coursework||{};data.auditLog=Array.isArray(data.auditLog)?data.auditLog:[];data.archives=Array.isArray(data.archives)?data.archives:[];data.lastBackupAt=data.lastBackupAt||'';data.studentSupport=data.studentSupport||{};data.quranShare=[40,50,60].includes(Number(data.quranShare))?Number(data.quranShare):50;for(const st of data.students){if(!st.subject)st.subject='quran';if(!st.section)st.section=data.sections[0]}backfillStudentUids(data);resolveAbsenceConflicts(data);return data}function logEvent(type,text,studentUid=''){
+ db.auditLog=db.auditLog||[];
+ db.auditLog.unshift({id:uid(),at:new Date().toISOString(),type,text,studentUid});
+ if(db.auditLog.length>500)db.auditLog.length=500;
+}
+function save(){try{localStorage.setItem(storage,JSON.stringify(db));storageOK=true}catch(_){storageOK=false}try{window.__onSave&&window.__onSave(db)}catch(_){}}function say(s,error=false){$('status').textContent=s+(storageOK?'':' — التخزين المحلي غير متاح، نزّل نسخة احتياطية.');$('status').classList.toggle('error',error)}const subjectNames={quran:'القرآن الكريم',islamic:'الدراسات الإسلامية',tajweed:'التجويد',life:'المهارات الحياتية'};
+const isLifeSection=name=>name==='أول متوسط ٦'||name==='1/6'||name==='١/٦'||/أول\s*متوسط\s*[٦6]$/.test(name||'');
+const sectionSubjects=section=>isLifeSection(section)?['quran','islamic','tajweed','life']:['quran','islamic','tajweed'];
+const visibleStudents=()=>db.students.filter(s=>(s.subject||'quran')===db.activeSubject&&(s.section||db.sections[0])===db.activeSection&&(s.status||'active')==='active');
+const rosterStudents=section=>db.students.filter(s=>(s.subject||'quran')==='quran'&&(s.section||db.sections[0])===section);
+function ensureRosterCopies(){for(const section of [...new Set(db.students.map(s=>s.section||db.sections[0]))])for(const master of rosterStudents(section)){ensureStudentUid(master,db.students);for(const subject of sectionSubjects(section)){if(subject==='quran')continue;let copy=db.students.find(s=>(s.section||db.sections[0])===section&&(s.subject||'quran')===subject&&s.studentUid===master.studentUid);if(!copy)db.students.push({id:uid(),name:master.name,subject,section,studentUid:master.studentUid,status:master.status||'active'});else copy.name=master.name}}}
+ensureRosterCopies();function renderScope(){
+ const subject=$('subjectSelect'),section=$('sectionSelect');
+ const area=localStorage.getItem('quran-main-area')||'study';
+ section.replaceChildren();
+ const shownSections=db.activeSubject==='life'&&area!=='students'?db.sections.filter(isLifeSection):db.sections;
+ shownSections.forEach(name=>{const opt=e('option',name);opt.value=name;section.append(opt)});
+ if(!shownSections.includes(db.activeSection))db.activeSection=shownSections[0]||db.sections[0];
+ section.value=db.activeSection;
+
+ const subjectLabel=subject.closest('label');
+ if(subjectLabel)subjectLabel.style.display=(area==='students'||area==='dashboard')?'none':'inline-block';
+
+ if(area!=='students'){
+   if(db.activeSubject==='life'&&!isLifeSection(db.activeSection)){
+     const only=db.sections.find(isLifeSection);if(only)db.activeSection=only;
+     section.value=db.activeSection;
+   }
+   subject.value=db.activeSubject;
+   subject.onchange=()=>{
+     db.activeSubject=subject.value;
+     if(db.activeSubject==='life'){const only=db.sections.find(isLifeSection);if(only)db.activeSection=only}
+     edit='';ensureRosterCopies();save();render()
+   };
+ }else{
+   subject.onchange=null;
+ }
+
+ section.onchange=()=>{db.activeSection=section.value;ensureRosterCopies();edit='';save();render()};
+ $('scopeNote').textContent=area==='students'
+   ?'إدارة طلاب '+db.activeSection+' مستقلة عن المواد.'
+   :(db.activeSubject==='life'?'المهارات الحياتية خاصة بشعبة أول متوسط ٦.':'طلاب الشعبة موحّدون في جميع المواد، والدرجات مستقلة لكل مادة.');
+}function selectors(id,obj,includeDay){const host=$(id);host.replaceChildren();[['t','الفصل',['الأول','الثاني']],['p','الفترة',['الأولى','الثانية']],['w','الأسبوع',weeks],...(includeDay?[['d','اليوم',days]]:[])].forEach(([field,label,values])=>{const span=e('span',label+' '),sel=e('select');values.forEach((v,i)=>{const opt=e('option',v);opt.value=i;sel.append(opt)});sel.value=obj[field];sel.onchange=()=>{obj[field]=Number(sel.value);edit='';save();render()};span.append(sel);host.append(span)})}function render(){renderScope();selectors('actual',db.actual,true);selectors('view',db.view,false);$('tabs').replaceChildren();let tabs;
+if(db.activeSubject==='quran')tabs={register:'كشف التسميع',tests:'الاختبارات',review:'المراجعة',report:'تقرير القرآن',calendar:'التقويم والإجازات',groupAssessment:'التقويم الجماعي',syncDevices:'مزامنة الأجهزة',backup:'النسخ الاحتياطي',parentPortal:'بوابة أولياء الأمور',parentMessages:'رسائل أولياء الأمور'};
+else if(db.activeSubject==='islamic')tabs={coursework:'رصد الدرجات',islamicReport:'الإسلامية فقط',combined:'الإسلامية + القرآن',groupAssessment:'التقويم الجماعي',syncDevices:'مزامنة الأجهزة',backup:'النسخ الاحتياطي',parentPortal:'بوابة أولياء الأمور',parentMessages:'رسائل أولياء الأمور'};
+else if(db.activeSubject==='tajweed')tabs={coursework:'رصد الدرجات',tajweedReport:'تقرير التجويد',groupAssessment:'التقويم الجماعي',syncDevices:'مزامنة الأجهزة',backup:'النسخ الاحتياطي',parentPortal:'بوابة أولياء الأمور',parentMessages:'رسائل أولياء الأمور'};
+else tabs={coursework:'رصد الدرجات',lifeReport:'تقرير المهارات الحياتية',groupAssessment:'التقويم الجماعي',syncDevices:'مزامنة الأجهزة',backup:'النسخ الاحتياطي',parentPortal:'بوابة أولياء الأمور',parentMessages:'رسائل أولياء الأمور'};
+
+const areaKey='quran-main-area';
+let area=localStorage.getItem(areaKey)||'study';
+const groups={dashboard:['dashboard'],study:['register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment'],parents:['parentPortal','parentMessages'],data:['syncDevices','backup']};
+document.querySelectorAll('#mainAreas button').forEach(b=>{
+ b.classList.toggle('active',b.dataset.area===area);
+ b.onclick=()=>{localStorage.setItem(areaKey,b.dataset.area);tab=b.dataset.area==='dashboard'?'dashboard':b.dataset.area==='students'?'students':b.dataset.area==='parents'?'parentPortal':b.dataset.area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');localStorage.setItem('quran-last-tab',tab);edit='';render()}
+});
+const allowed=groups[area]||groups.study;
+Object.keys(tabs).forEach(id=>{if(!allowed.includes(id))delete tabs[id]});
+if(area==='dashboard')tabs={dashboard:'ملخص المتابعة'};if(area==='students')tabs={students:'قائمة الطلاب'};if(!Object.prototype.hasOwnProperty.call(tabs,tab))tab=area==='dashboard'?'dashboard':area==='students'?'students':area==='parents'?'parentPortal':area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');
+for(const id of ['dashboard','register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment','syncDevices','parentPortal','parentMessages','backup'])$(id).classList.add('hide');
+Object.entries(tabs).forEach(([id,name])=>{const b=e('button',name);if(tab===id)b.className='active';b.onclick=()=>{tab=id;edit='';localStorage.setItem('quran-last-tab',tab);render()};$('tabs').append(b)});
+$(tab).classList.remove('hide');
+if(tab==='dashboard')dashboard();if(tab==='register')register();if(tab==='calendar')calendar();if(tab==='students')students();if(tab==='tests')tests();if(tab==='review')review();if(tab==='report')report();if(tab==='coursework')coursework();if(tab==='combined')combinedReport();if(tab==='islamicReport')subjectReport('islamic');if(tab==='tajweedReport')subjectReport('tajweed');if(tab==='lifeReport')subjectReport('life');if(tab==='groupAssessment')groupAssessment();if(tab==='syncDevices'&&window.__cloudRender)window.__cloudRender('syncDevices');if(tab==='parentPortal'&&window.__cloudRender)window.__cloudRender('parentPortal');if(tab==='parentMessages'&&window.__cloudRender)window.__cloudRender('parentMessages');if(tab==='backup')renderArchives()}
+
+function quranIncompleteCount(section){
+ const oldSection=db.activeSection,oldSubject=db.activeSubject;db.activeSection=section;db.activeSubject='quran';
+ let n=0;for(const s of visibleStudents()){const r=summary(db.view.t,db.view.p,s.id);if(!r.complete||db.tests[tk(db.view.t,db.view.p,s.id)]===undefined)n++}
+ db.activeSection=oldSection;db.activeSubject=oldSubject;return n
+}
+function courseIncompleteCount(subject,section){
+ return subjectStudents(subject).filter(()=>false).length /* placeholder replaced below */
+}
+function dashboard(){
+ const host=$('dashboardBody');host.replaceChildren();
+ const grid=e('div');grid.className='dashboard-grid';
+ let total=0,withdrawn=0;
+ for(const section of db.sections){const rs=rosterStudents(section);total+=rs.filter(s=>(s.status||'active')==='active').length;withdrawn+=rs.filter(s=>(s.status||'active')==='withdrawn').length}
+ const cards=[['الطلاب النشطون',total],['الطلاب المنسحبون',withdrawn],['الشعب',db.sections.length],['آخر نسخة احتياطية',db.lastBackupAt?new Date(db.lastBackupAt).toLocaleString('ar-SA'):'لم تُسجل بعد']];
+ for(const [label,val] of cards){const c=e('div');c.className='dashboard-card';c.append(e('span',label),e('b',String(val)));grid.append(c)}
+ host.append(grid);
+ const h3=e('h4','حالة الرصد في الفترة المعروضة');host.append(h3);
+ const wrap=e('div');wrap.className='scroll';const table=e('table'),trh=e('tr');
+ ['الشعبة','المادة','طلاب يحتاجون إكمال الرصد'].forEach(x=>trh.append(e('th',x)));table.append(trh);
+ for(const section of db.sections){
+   for(const subject of sectionSubjects(section)){
+     let count=0;
+     if(subject==='quran'){
+       const students=db.students.filter(s=>(s.subject||'quran')==='quran'&&(s.section||db.sections[0])===section&&(s.status||'active')==='active');
+       for(const s of students){const r=summary(db.view.t,db.view.p,s.id);if(!r.complete||db.tests[tk(db.view.t,db.view.p,s.id)]===undefined)count++}
+     }else{
+       const students=db.students.filter(s=>(s.subject||'quran')===subject&&(s.section||db.sections[0])===section&&(s.status||'active')==='active');
+       for(const s of students){const c=courseCalc(subject,db.view.t,db.view.p,s.id);if(!c.complete)count++}
+     }
+     const tr=e('tr');[section,subjectNames[subject],count].forEach(v=>tr.append(e('td',String(v))));table.append(tr)
+   }
+ }
+ wrap.append(table);host.append(wrap);
+ const note=e('p','يعتمد عدّ النواقص على الفصل والفترة المحددين في «الكشف المعروض» أعلى الصفحة.');note.className='muted';host.append(note)
+}
+function studentMasterByUid(studentUid){
+ return db.students.find(s=>s.studentUid===studentUid&&(s.subject||'quran')==='quran')
+   ||db.students.find(s=>s.studentUid===studentUid)
+}
+function studentSubjectRecord(studentUid,subject){
+ const master=studentMasterByUid(studentUid);if(!master)return null;
+ const exact=db.students.find(s=>s.studentUid===studentUid&&(s.subject||'quran')===subject);
+ if(exact)return exact;
+ if((master.subject||'quran')===subject)return master;
+ const mn=cleanName(master.name),ms=master.section||db.sections[0];
+ return db.students.find(s=>(s.subject||'quran')===subject&&cleanName(s.name)===mn&&(s.section||db.sections[0])===ms)||null;
+}
+function quranDailyRows(studentUid,t,p=null,w=null){
+ const q=studentSubjectRecord(studentUid,'quran');if(!q)return[];const rows=[];
+ for(let pp=0;pp<2;pp++){if(p!==null&&pp!==p)continue;for(let ww=0;ww<7;ww++){if(w!==null&&ww!==w)continue;for(let d=0;d<5;d++){if(testDay(ww,d)||holiday(t,pp,ww,d))continue;const k=key(t,pp,ww,d,q.id),g=db.grades[k],abs=!!db.absences[k],position=pos(t,pp,ww,d);if(!(position<=now()||g||abs))continue;let status='لم يُرصد بعد',value=null;if(abs)status='غياب';else if(g){value=Number(g.value);status=g.madeUpAbsence?'عُوّض بعد غياب':g.mark==='early'?'تسميع مبكر':g.mark==='late'?'تسميع لاحق':g.mark==='modified'?'مقطع معدّل':'تسميع عادي'}rows.push({period:pp+1,week:ww+1,weekName:weeks[ww],day:days[d],value,status,mark:g?.mark||'',madeUpAbsence:!!g?.madeUpAbsence,distinguished:!!g?.distinguished,pos:position})}}}return rows
+}
+function quranStats(rows){const counts={0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0};let modified=0,madeUpAbsence=0,currentAbsence=0,early=0,distinguished=0,earned=0,possible=0,streak=0,bestStreak=0;for(const r of rows){possible+=7;if(r.value===null){if(r.status==='غياب')currentAbsence++;streak=0;continue}earned+=r.value;counts[r.value]=(counts[r.value]||0)+1;if(r.mark==='modified')modified++;if(r.mark==='early')early++;if(r.distinguished)distinguished++;if(r.madeUpAbsence)madeUpAbsence++;if(r.value===7){streak++;bestStreak=Math.max(bestStreak,streak)}else streak=0}const scored=rows.filter(r=>r.value!==null),last10=scored.slice(-10),prev10=scored.slice(-20,-10),avg=x=>x.length?x.reduce((s,r)=>s+r.value,0)/x.length:null,la=avg(last10),pa=avg(prev10),trend=la===null||pa===null?'غير كافٍ':la>pa+.15?'يتحسن':la<pa-.15?'يتراجع':'مستقر';return{gradeCounts:counts,modified,madeUpAbsence,currentAbsence,early,distinguished,totalEarned:earned,totalPossible:possible,pending:rows.filter(r=>r.status==='لم يُرصد بعد').length,last10Average:la===null?null:Math.round(la*100)/100,trend,bestStreak,attendanceRate:rows.length?Math.round((1-currentAbsence/rows.length)*1000)/10:null}}
+function quranScopePercent(studentUid,t,p,w=null){const s=quranStats(quranDailyRows(studentUid,t,p,w));return s.totalPossible?s.totalEarned/s.totalPossible*100:null}
+function rankFromValues(studentUid,section,calc,minPeers=2){const vals=rosterStudents(section).filter(s=>(s.status||'active')==='active').map(s=>({uid:s.studentUid,v:calc(s.studentUid)})).filter(x=>x.v!==null&&Number.isFinite(x.v)),me=vals.find(x=>x.uid===studentUid);if(!me||vals.length<minPeers)return null;return{rank:1+vals.filter(x=>x.v>me.v+1e-9).length,total:vals.length,percent:Math.round(me.v*100)/100}}
+function quranRanks(studentUid,t){const m=studentMasterByUid(studentUid);if(!m)return null;return{weeks:[0,1].flatMap(p=>Array.from({length:7},(_,w)=>({period:p+1,week:w+1,rank:rankFromValues(studentUid,m.section,u=>quranScopePercent(u,t,p,w))}))),periods:[0,1].map(p=>({period:p+1,rank:rankFromValues(studentUid,m.section,u=>quranScopePercent(u,t,p))}))}}
+function detailedQuran(studentUid,t){const q=studentSubjectRecord(studentUid,'quran');if(!q)return null;const daily=quranDailyRows(studentUid,t),stats=quranStats(daily),periods=[0,1].map(p=>{const sum=summary(t,p,q.id),test=db.tests[tk(t,p,q.id)];return{period:p+1,complete:sum.complete,approved:!!sum.approved,score:sum.finalScore??sum.score??null,test:test??null,periodScore:quranPeriodScoreForStudent(t,p,q.id)}});return{periods,daily,stats,ranks:quranRanks(studentUid,t)}}
+function detailedCourse(subject,studentUid,t){const rec=studentSubjectRecord(studentUid,subject);if(!rec)return null;return[0,1].map(p=>{const c=courseCalc(subject,t,p,rec.id),categories=courseDefs[subject].map(d=>{const part=c.parts[d.id]||{sum:0,filled:0,max:d.count*d.max};return{id:d.id,name:d.name,earned:part.sum||0,max:d.violation?d.count:d.count*d.max,filled:part.filled||0,count:d.count,violation:!!d.violation,test:!!d.test,remaining:Math.max(0,d.count-(part.filled||0))}}),has=courseHasAcademicData(subject,t,p,rec.id);return{period:p+1,complete:c.complete,scaled:has?c.scaled:null,target:c.target,violations:c.violations,deduction:c.deduction,stars:c.stars,categories}})}
+function coursePeriodPercent(subject,studentUid,t,p){const rec=studentSubjectRecord(studentUid,subject);if(!rec)return null;const c=courseCalc(subject,t,p,rec.id);return courseHasAcademicData(subject,t,p,rec.id)&&c.target?c.scaled/c.target*100:null}
+function courseRanks(subject,studentUid,t){const m=studentMasterByUid(studentUid);return m?[0,1].map(p=>({period:p+1,rank:rankFromValues(studentUid,m.section,u=>coursePeriodPercent(subject,u,t,p))})):null}
+function currentStudentPercent(studentUid,t,p=null){let earned=0,max=0;const q=detailedQuran(studentUid,t);if(q){const st=quranStats(p===null?q.daily:q.daily.filter(r=>r.period===p+1));earned+=st.totalEarned;max+=st.totalPossible}for(const subject of ['islamic','tajweed','life']){for(const r of detailedCourse(subject,studentUid,t)||[]){if(p!==null&&r.period!==p+1)continue;for(const cat of r.categories)if(!cat.violation&&cat.filled){const def=courseDefs[subject].find(d=>d.id===cat.id),raw=def.count*def.max,weight=def.weight??raw,f=raw?weight/raw:1;earned+=cat.earned*f;max+=cat.filled*def.max*f}}}return max?earned/max*100:null}
+function classRank(studentUid,t,p=null){const m=studentMasterByUid(studentUid);return m?rankFromValues(studentUid,m.section,u=>currentStudentPercent(u,t,p)):null}
+function buildDetailedStudentReport(studentUid,t){const m=studentMasterByUid(studentUid);if(!m)return null;const support=supportFor(studentUid);const report={generatedAt:new Date().toISOString(),semester:t,name:m.name,section:m.section,status:m.status||'active',rank:classRank(studentUid,t),periodRanks:[0,1].map(p=>({period:p+1,rank:classRank(studentUid,t,p)})),support:{...support,remedialPlan:support.level==='remedial'?support.remedialPlan:'',remedialTasks:support.level==='remedial'?support.remedialTasks:''},quran:detailedQuran(studentUid,t),islamic:detailedCourse('islamic',studentUid,t),tajweed:detailedCourse('tajweed',studentUid,t),life:detailedCourse('life',studentUid,t),courseRanks:{islamic:courseRanks('islamic',studentUid,t),tajweed:courseRanks('tajweed',studentUid,t),life:courseRanks('life',studentUid,t)},missing:[],strengths:[],needs:[]};if(report.quran?.stats.pending)report.missing.push('القرآن: '+report.quran.stats.pending+' مقطعًا مستحقًا لم يُرصد.');if((report.quran?.stats.last10Average??0)>=6)report.strengths.push('مستوى قوي في آخر تسميعات القرآن.');if(report.quran?.stats.bestStreak>=3)report.strengths.push('سلسلة متميزة من الدرجات الكاملة.');if(report.quran?.stats.currentAbsence>0)report.needs.push('يوجد غياب في القرآن يحتاج متابعة أو تعويض.');if(report.quran?.stats.trend==='يتراجع')report.needs.push('متوسط التسميع الأخير أقل من السابق.');for(const [key,title] of [['islamic','الدراسات الإسلامية'],['tajweed','التجويد'],['life','المهارات الحياتية']])for(const r of report[key]||[])for(const c of r.categories)if(!c.violation&&c.remaining)report.missing.push(title+' — الفترة '+(r.period===1?'الأولى':'الثانية')+' — '+c.name+': متبقٍ '+c.remaining+' من '+c.count+'.');return report}
+function buildAllSemesterStudentReport(studentUid){const m=studentMasterByUid(studentUid);if(!m)return null;const full=supportFor(studentUid);const{privateNote,portalEnabled,...parentVisibleSupport}=full;return{generatedAt:new Date().toISOString(),name:m.name,section:m.section,status:m.status||'active',support:parentVisibleSupport,semesters:[buildDetailedStudentReport(studentUid,0),buildDetailedStudentReport(studentUid,1)]}}
+function buildStudentPagePayload(studentUid){
+ const master=studentMasterByUid(studentUid);if(!master)return null;
+ const links={quran:studentSubjectRecord(studentUid,'quran')?.id||null,islamic:studentSubjectRecord(studentUid,'islamic')?.id||null,tajweed:studentSubjectRecord(studentUid,'tajweed')?.id||null,life:studentSubjectRecord(studentUid,'life')?.id||null};
+ return{id:studentUid,full_name:master.name,report:buildAllSemesterStudentReport(studentUid),activeSemester:db.view.t,subjectLinks:links,teacherHistory:(db.auditLog||[]).filter(x=>x.studentUid===studentUid).slice(0,30)}
+}
+function printCertificate(studentUid){
+  const m=studentMasterByUid(studentUid);if(!m)return say('تعذر إيجاد الطالب.',true);
+  const rep=buildDetailedStudentReport(studentUid,db.view.t);
+  const achievement=(rep?.strengths&&rep.strengths[0])||'الانتظام والالتزام في متابعة الدروس';
+  const win=window.open('','_blank');
+  if(!win)return say('يرجى السماح بفتح نافذة منبثقة لطباعة الشهادة.',true);
+  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><title>شهادة تميّز</title>
+  <style>
+    body{font-family:Tahoma,Arial;background:#f4f7f5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+    .cert{width:720px;max-width:92vw;border:10px solid #205348;border-radius:16px;padding:50px;text-align:center;background:#fff}
+    .cert h1{color:#205348;font-size:30px;margin:0 0 6px}
+    .cert .sub{color:#526b60;margin-bottom:28px}
+    .cert .name{font-size:34px;font-weight:800;color:#193d34;margin:18px 0;border-bottom:2px solid #d6e3dd;display:inline-block;padding-bottom:8px}
+    .cert .achieve{font-size:19px;color:#174c3d;margin:22px 0;line-height:1.8}
+    .cert .date{margin-top:36px;color:#526b60;font-size:14px}
+    @media print{body{background:#fff}.cert{border-width:6px}}
+  </style>
+  <body>
+    <div class="cert">
+      <h1>شهادة تميّز</h1>
+      <div class="sub">تُمنح هذه الشهادة تقديرًا للجهد والمثابرة</div>
+      <div class="name">${escapeHtmlSafe(m.name)}</div>
+      <div class="achieve">${escapeHtmlSafe(achievement)}</div>
+      <div class="date">${new Date().toLocaleDateString('ar-SA')}</div>
+    </div>
+    <script>window.onload=()=>window.print()<\/script>
+  </body></html>`);
+  win.document.close();
+}
+function escapeHtmlSafe(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function openStudentPage(studentUid,section='report'){
+ const payload=buildStudentPagePayload(studentUid);if(!payload)return say('تعذر فتح ملف الطالب.',true);
+ sessionStorage.setItem('quran-student-page-preview',JSON.stringify(payload));
+ window.open('./student.html?v=20260930-linkagefix&preview=1&section='+encodeURIComponent(section),'_blank');
+}
+function studentNameLink(st){const b=e('button',st.name);b.type='button';b.className='student-name-link';b.title='فتح صفحة الطالب الكاملة';b.onclick=()=>openStudentPage(st.studentUid);return b}
+function showStudentProfile(studentUid){openStudentPage(studentUid)}
+function renderStudentHistory(){
+ const host=$('studentHistory');if(!host)return;host.replaceChildren();const items=(db.auditLog||[]).slice(0,100);
+ if(!items.length){host.append(e('p','لا توجد أحداث مسجلة بعد.'));return}
+ for(const item of items){const row=e('div');row.className='history-item';row.append(e('div',item.text));const t=e('div',new Date(item.at).toLocaleString('ar-SA'));t.className='history-time';row.append(t);host.append(row)}
+}
+function register(){const rn=$('register').querySelector('.daily-score-note');if(!rn){const n=e('div','الرصد اليومي للقرآن الكريم: الدرجة الكاملة لكل خانة ٧ درجات.');n.className='course-guide daily-score-note';$('register').insertBefore(n,$('register').children[1]||null);}const {t,p,w}=db.view,h=e('tr');h.append(e('th','الطالب'));days.forEach((day,d)=>h.append(e('th',testDay(w,d)?day+' — اختبار':day)));h.append(e('th','مجموع الأسبوع'));$('head').replaceChildren(h);$('body').replaceChildren();visibleStudents().forEach((s,si)=>{const tr=e('tr');const nt=e('td');nt.append(studentNameLink(s));tr.append(nt);let sum=0,count=0;days.forEach((day,d)=>{const td=e('td'),k=key(t,p,w,d,s.id),absence=db.absences[k],entry=absence?undefined:db.grades[k],position=pos(t,p,w,d);td.className='grade-cell';td.dataset.gradeKey=k;if(holiday(t,p,w,d)){td.textContent='إجازة';tr.append(td);return}if(testDay(w,d)){td.textContent='اختبار';tr.append(td);return}if(entry){sum+=entry.value;count++}const stack=e('div');stack.className='grade-stack';const invalidate=()=>{delete db.approvals[tk(t,p,s.id)];save()};const deleteGrade=()=>{if(!db.grades[k])return;if(!confirm('هل تريد حذف درجة '+s.name+' ليوم '+day+' من الأسبوع '+(w+1)+'؟ ستعود الخانة فارغة (—)، ولن تُسجّل صفرًا.'))return;delete db.grades[k];invalidate();edit='';say('حُذفت الدرجة وعادت الخانة فارغة، وأُلغي اعتماد الفترة إن كان موجودًا.');register()};const editGrade=()=>{edit=k;register()};const toggleStar=()=>{const item=db.grades[k];if(!item)return;item.distinguished=!item.distinguished;invalidate();say(item.distinguished?'أُضيف التميّز للطالب '+s.name:'أُزيل التميّز للطالب '+s.name);register()};const actions=()=>{const row=e('div');row.className='grade-actions';const action=(letter,cls,title,fn)=>{const b=e('button',letter);b.type='button';b.className='grade-action '+cls;b.title=title;b.setAttribute('aria-label',title);b.onclick=fn;row.append(b)};action('ح','action-delete','حذف الدرجة',deleteGrade);action('ع','action-edit','تعديل الدرجة',editGrade);action('ج','action-star'+(db.grades[k]?.distinguished?' selected':''),db.grades[k]?.distinguished?'إزالة التميّز':'إضافة التميّز',toggleStar);return row};if(edit===k){const inp=e('input');inp.className='grade-editor';inp.inputMode='numeric';inp.maxLength=1;inp.value=entry?.value??'';inp.onchange=()=>{const v=normal(inp.value);if(v.trim()===''){inp.value=db.grades[k]?.value??'';return say('لإفراغ الخانة استخدم زر ح؛ الفراغ ليس صفرًا.',true)}if(!/^[0-7]$/.test(v)){inp.value=db.grades[k]?.value??'';return say('درجة التسميع من ٠ إلى ٧ فقط.',true)}const old=db.grades[k],mark=old?.mark;db.grades[k]={value:Number(v),mark:mark==='early'||mark==='late'?mark:old&&old.value!==Number(v)?'modified':!old&&position>now()?'early':!old&&position<now()?'late':mark||'',distinguished:!!old?.distinguished,madeUpAbsence:!!(old?.madeUpAbsence||absence)};delete db.absences[k];logEvent('grade',(old?'عُدلت':'رُصدت')+' درجة القرآن للطالب «'+s.name+'» إلى '+v+'.',s.studentUid);invalidate();say('حُفظت الدرجة، وأُلغي اعتماد الفترة إن كان موجودًا.');edit='';register()};inp.onblur=()=>{if(edit===k){edit='';register()}};inp.onkeydown=ev=>{
+ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(ev.key)){quranArrowKey(ev);return}
+ if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();inp.blur()}
+ else if(ev.key==='Escape'){ev.preventDefault();edit='';register()}
+};stack.append(inp);if(entry)stack.append(actions());if(!entry&&position<=now()){const b=e('button',absence?'إلغاء الغياب':'غائب');b.className='absent';b.onclick=()=>{if(db.absences[k]){delete db.absences[k];logEvent('absence','أُلغي غياب القرآن للطالب «'+s.name+'» في '+day+' من الأسبوع '+weeks[w]+'.',s.studentUid)}else{db.absences[k]=true;delete db.grades[k];logEvent('absence','سُجل غياب القرآن للطالب «'+s.name+'» في '+day+' من الأسبوع '+weeks[w]+'.',s.studentUid)}invalidate();register()};stack.append(b)}}else{const badge=e('button');badge.type='button';badge.className='grade-badge '+(absence&&!entry?'absent':entry?.mark||'');badge.onclick=editGrade;const value=e('span',absence&&!entry?'—':entry?String(entry.value):'—');value.className='grade-value';badge.append(value);if(entry||absence){const status=e('span',absence&&!entry?'غياب':entry.mark==='early'?'تسميع مبكر':entry.mark==='late'?'تسميع لاحق':entry.mark==='modified'?'درجة معدّلة':'تسميع عادي');status.className='grade-status';badge.append(status)}if(entry&&(entry.mark==='early'||entry.distinguished)){const star=e('span','★');star.className='grade-star';star.title=entry.mark==='early'?'نجمة التسميع المبكر'+(entry.distinguished?' والتميّز':''):'نجمة التميّز';badge.append(star)}stack.append(badge);if(entry)stack.append(actions())}td.append(stack);tr.append(td)});tr.append(e('td',sum+' / '+(count*7)));$('body').append(tr)});if(edit){const inp=$('body').querySelector('input.grade-editor');if(inp){inp.focus();inp.select()}}}function deleteStudentRecords(ids){for(const field of ['grades','absences','tests','approvals'])for(const k of Object.keys(db[field]||{}))if(ids.some(id=>k.endsWith('|'+id)))delete db[field][k];for(const k of Object.keys(db.coursework||{}))if(ids.some(id=>k.includes('|'+id+'|')))delete db.coursework[k]}
+function syncRosterOrder(section,orderedUids){const rank=new Map(orderedUids.map((u,i)=>[u,i]));const selected=db.students.filter(s=>(s.section||db.sections[0])===section&&rank.has(s.studentUid)),others=db.students.filter(s=>!((s.section||db.sections[0])===section&&rank.has(s.studentUid)));selected.sort((a,b)=>rank.get(a.studentUid)-rank.get(b.studentUid)||sectionSubjects(section).indexOf(a.subject||'quran')-sectionSubjects(section).indexOf(b.subject||'quran'));db.students=[...others,...selected]}
+function supportFor(studentUid){
+ const s=db.studentSupport[studentUid]||(db.studentSupport[studentUid]={});
+ const defaults={level:'normal',enrichmentPlan:'',remedialPlan:'',teacherNote:'',privateNote:'',goal:'',contactNeeded:false,portalEnabled:true,praise:'',enrichmentTasks:'',remedialTasks:''};
+ for(const [k,v] of Object.entries(defaults))if(s[k]===undefined)s[k]=v;return s
+}
+function setStudentStatus(studentUid,status){
+ for(const x of db.students)if(x.studentUid===studentUid)x.status=status;
+}
+function transferStudent(studentUid,toSection){
+ const copies=db.students.filter(x=>x.studentUid===studentUid);
+ if(!copies.length)return;
+ const master=copies.find(x=>(x.subject||'quran')==='quran')||copies[0];
+ const name=master.name;
+ /* ننقل النسخ الحالية إلى الشعبة الجديدة مع بقاء المعرفات نفسها، فتظل الدرجات القديمة محفوظة */
+ for(const x of copies){x.section=toSection;x.status='active'};logEvent('transfer','نُقل الطالب «'+name+'» إلى '+toSection+'.',studentUid)
+ /* نضيف فقط المواد التي تحتاجها الشعبة الجديدة، ولا نحذف أي سجل درجات سابق */
+ for(const subject of sectionSubjects(toSection)){
+   if(!copies.some(x=>(x.subject||'quran')===subject)){
+     db.students.push({id:uid(),name,subject,section:toSection,studentUid,status:'active'})
+   }
+ }
+}
+function students(){
+ const list=$('studentList');list.replaceChildren();
+ const wrap=e('div');wrap.className='students-table-wrap';
+ const table=e('table');table.className='students-table';
+ const head=e('tr');['الطالب','الحالة','المستوى','المتابعة','البوابة','الترتيب','نقل','الإجراء'].forEach(x=>head.append(e('th',x)));
+ table.append(head);wrap.append(table);list.append(wrap);
+ const all=rosterStudents(db.activeSection);
+ const activeCount=all.filter(s=>(s.status||'active')==='active').length;
+ const withdrawnCount=all.length-activeCount;
+ $('studentsScope').textContent='قائمة طلاب '+db.activeSection+' هي القائمة المركزية لجميع مواد الشعبة. النقل أو الانسحاب لا يحذف الدرجات السابقة.';
+ const stats=$('studentStats');stats.replaceChildren();
+ [['إجمالي الطلاب',all.length],['النشطون',activeCount],['المنسحبون',withdrawnCount]].forEach(([label,n])=>{const x=e('span',label+': '+n);x.className='student-stat';stats.append(x)});
+
+ const filter=$('studentStatusFilter');
+ if(!filter.dataset.ready){
+   filter.value=localStorage.getItem('quran-student-filter')||'active';
+   filter.onchange=()=>{localStorage.setItem('quran-student-filter',filter.value);students()};
+   filter.dataset.ready='1';
+ }
+ const wanted=filter.value||'active';
+ const group=all.filter(s=>wanted==='all'||(s.status||'active')===wanted);
+
+ group.forEach((s,i)=>{
+  const active=(s.status||'active')==='active';
+  const row=e('tr');
+  const support=supportFor(s.studentUid);
+  const supportSel=e('select');
+  [['normal','المستوى: عادي'],['distinguished','متميز'],['remedial','يحتاج خطة علاجية']].forEach(([v,l])=>{const o=e('option',l);o.value=v;supportSel.append(o)});
+  supportSel.value=support.level||'normal';
+  supportSel.onchange=()=>{support.level=supportSel.value;logEvent('support','تغيّر تصنيف متابعة الطالب «'+s.name+'» إلى «'+supportSel.options[supportSel.selectedIndex].text+'».',s.studentUid);save();students()};
+  const planBtn=e('button','المتابعة');planBtn.type='button';planBtn.title='فتح إدارة متابعة الطالب';
+  planBtn.onclick=()=>openStudentPage(s.studentUid,'followup');
+  const certBtn=e('button','طباعة شهادة');certBtn.type='button';certBtn.title='طباعة شهادة تميّز للطالب';
+  certBtn.onclick=()=>printCertificate(s.studentUid);
+  const portalBtn=e('button',support.portalEnabled===false?'البوابة موقوفة':'البوابة مفعلة');portalBtn.type='button';
+  portalBtn.onclick=()=>{support.portalEnabled=!(support.portalEnabled!==false);logEvent('support',(support.portalEnabled?'فُعّلت':'أُوقفت')+' بوابة ولي الأمر للطالب «'+s.name+'».',s.studentUid);save();students()};
+  const state=e('span',active?'نشط':'منسحب');
+  state.style.fontWeight='bold';state.style.padding='5px 8px';
+
+  if(active){
+   const transfer=e('select');
+   const first=e('option','نقل');first.value='';transfer.append(first);
+   db.sections.filter(sec=>sec!==db.activeSection).forEach(sec=>{const o=e('option',sec);o.value=sec;transfer.append(o)});
+   transfer.onchange=()=>{const to=transfer.value;if(!to)return;if(!confirm('نقل الطالب «'+s.name+'» إلى '+to+'؟ ستبقى درجاته وسجلاته السابقة محفوظة.')){transfer.value='';return}transferStudent(s.studentUid,to);ensureRosterCopies();save();students();say('نُقل الطالب إلى '+to+' مع الاحتفاظ بسجلاته السابقة.')};
+
+   const withdraw=e('button','انسحاب');withdraw.type='button';
+   withdraw.onclick=()=>{if(!confirm('تسجيل «'+s.name+'» كطالب منسحب؟ لن تُحذف درجاته السابقة.'))return;setStudentStatus(s.studentUid,'withdrawn');logEvent('withdraw','سُجل الطالب «'+s.name+'» منسحبًا من '+db.activeSection+'.',s.studentUid);save();students();say('سُجل الطالب منسحبًا، وبقيت درجاته محفوظة.')};
+
+   const activeGroup=all.filter(x=>(x.status||'active')==='active');
+   const move=(symbol,delta,title)=>{const btn=e('button',symbol);btn.type='button';btn.className='student-move';btn.title=title;
+     const j=activeGroup.findIndex(x=>x.studentUid===s.studentUid);
+     btn.disabled=j<0||j+delta<0||j+delta>=activeGroup.length;
+     btn.onclick=()=>{const current=activeGroup.slice(),k=current.findIndex(x=>x.studentUid===s.studentUid);if(k<0||k+delta<0||k+delta>=current.length)return;[current[k],current[k+delta]]=[current[k+delta],current[k]];syncRosterOrder(db.activeSection,current.map(x=>x.studentUid));save();students();say('حُفظ ترتيب الطلاب.')};return btn};
+   const cName=e('td');cName.className='student-col';cName.append(studentNameLink(s));
+  const cState=e('td');cState.append(state);const cLevel=e('td');cLevel.append(supportSel);
+  const cFollow=e('td');cFollow.append(planBtn,certBtn);const cPortal=e('td');cPortal.append(portalBtn);
+  const cOrder=e('td');cOrder.append(move('↑',-1,'رفع الطالب'),move('↓',1,'خفض الطالب'));
+  const cTransfer=e('td');cTransfer.append(transfer);const cAction=e('td');cAction.append(withdraw);
+  row.append(cName,cState,cLevel,cFollow,cPortal,cOrder,cTransfer,cAction);
+  }else{
+   const restore=e('button','إعادة للقائمة');restore.type='button';
+   restore.onclick=()=>{setStudentStatus(s.studentUid,'active');logEvent('restore','أُعيد الطالب «'+s.name+'» إلى كشوف '+db.activeSection+'.',s.studentUid);save();students();say('أُعيد الطالب إلى كشوف الدرجات.')};
+   const cName=e('td');cName.className='student-col';cName.append(studentNameLink(s));
+  const cState=e('td');cState.append(state);const cLevel=e('td');cLevel.append(supportSel);
+  const cFollow=e('td');cFollow.append(planBtn,certBtn);const cPortal=e('td');cPortal.append(portalBtn);
+  const cOrder=e('td','—'),cTransfer=e('td','—'),cAction=e('td');cAction.append(restore);
+  row.append(cName,cState,cLevel,cFollow,cPortal,cOrder,cTransfer,cAction);
+  }
+  table.append(row)
+ });
+ if(!group.length){const empty=e('p',wanted==='withdrawn'?'لا يوجد طلاب منسحبون في هذه الشعبة.':'لا يوجد طلاب في هذا العرض.');empty.className='muted';wrap.append(empty)}
+ const search=$('studentSearch'),results=$('studentSearchResults');
+ const runSearch=()=>{results.replaceChildren();const q=cleanName(search.value);if(!q){results.classList.add('hide');return}results.classList.remove('hide');
+   const matches=rosterStudents(db.activeSection).filter(s=>cleanName(s.name).includes(q)).slice(0,12);
+   if(!matches.length){results.append(e('p','لا توجد نتيجة.'));return}
+   for(const s of matches){const b=e('button',s.name);b.type='button';b.onclick=()=>openStudentPage(s.studentUid);results.append(b)}
+ };
+ search.oninput=runSearch;runSearch();renderStudentHistory();
+}function tests(){const body=$('testBody');body.replaceChildren();visibleStudents().forEach(s=>{const tr=e('tr');const nt=e('td');nt.append(studentNameLink(s));tr.append(nt);for(let p=0;p<2;p++){const td=e('td'),inp=e('input'),k=tk(db.view.t,p,s.id);inp.style.width='70px';inp.className='test-grade-input';inp.onkeydown=testArrowKey;inp.inputMode='decimal';inp.value=db.tests[k]??'';inp.onchange=()=>{const v=normal(inp.value.trim());if(v===''){delete db.tests[k];delete db.approvals[k];save();return say('أُفرغت درجة الاختبار وأُلغي الاعتماد.')}const n=Number(v);if(!Number.isFinite(n)||n<0||n>10||n*2!==Math.round(n*2)){inp.value=db.tests[k]??'';return say('الاختبار من ٠ إلى ١٠ بفواصل نصف درجة.')}db.tests[k]=n;delete db.approvals[k];logEvent('test','رُصد/عُدل اختبار القرآن للطالب «'+s.name+'» إلى '+n+'.',s.studentUid);save();say('حُفظ الاختبار، وأُلغي اعتماد الفترة إن كان موجودًا.')};td.append(inp);tr.append(td)}body.append(tr)})}function holiday(t,p,w,d){return !!db.holidays[[t,p,w,d].join('|')]}function calendar(){const {t,p,w}=db.view,host=$('calendarDays');host.replaceChildren();days.forEach((day,d)=>{const row=e('p'),check=e('input'),k=[t,p,w,d].join('|');check.type='checkbox';check.checked=holiday(t,p,w,d);check.disabled=testDay(w,d);check.onchange=()=>{if(check.checked){const conflicts=visibleStudents().filter(s=>db.grades[key(t,p,w,d,s.id)]||db.absences[key(t,p,w,d,s.id)]);if(conflicts.length){check.checked=false;return say('لا يمكن اعتماد إجازة: توجد درجات أو حالات غياب في هذا اليوم لـ '+conflicts.map(s=>s.name).join('، ')+'. راجع السجلات أولًا؛ لن يحذفها التطبيق.')}db.holidays[k]=true}else delete db.holidays[k];for(const s of visibleStudents())delete db.approvals[tk(t,p,s.id)];save();calendar();say('حُدّث التقويم وأُلغي اعتماد الفترة المتأثرة لإعادة حساب النتائج.')};row.append(check,e('span',day+(testDay(w,d)?' — اختبار الفترة (ليس درس تسميع)':'')));host.append(row)});let n=0;for(let week=0;week<7;week++)for(let d=0;d<5;d++)if(!testDay(week,d)&&!holiday(t,p,week,d))n++;$('calendarNote').textContent='عدد الدروس المطلوبة في الفترة المعروضة بعد استبعاد الإجازات: '+n+' من أصل ٣٤.'}function summary(t,p,id){let sum=0,n=0,absent=0,pending=0,required=0;const missing=[],unresolved=[];for(let w=0;w<7;w++)for(let d=0;d<5;d++){if(testDay(w,d)||holiday(t,p,w,d))continue;required++;const k=key(t,p,w,d,id),entry=db.grades[k],label='الأسبوع '+weeks[w]+' — '+days[d];if(db.absences[k])absent++;else if(entry){sum+=entry.value;n++}else{unresolved.push(label);if(pos(t,p,w,d)<=now()){pending++;missing.push(label)}}}const unresolvedCount=unresolved.length,approved=!!db.approvals[tk(t,p,id)],complete=unresolvedCount===0;const periodScore=complete&&required?Math.round(sum/required/7*1500)/100:null;return{n,absent,pending,required,missing,unresolved,unresolvedCount,approved,score:n?Math.round(sum/n/7*1500)/100:null,periodScore,finalScore:approved?periodScore:null,complete}}function starCounts(t,id){let distinguished=0,early=0;for(let p=0;p<2;p++)for(let w=0;w<7;w++)for(let d=0;d<5;d++){if(testDay(w,d)||holiday(t,p,w,d))continue;const k=key(t,p,w,d,id),item=db.grades[k];if(!item||db.absences[k])continue;if(item.distinguished)distinguished++;if(item.mark==='early')early++}return{distinguished,early}}function review(){const root=$('reviewBody');root.replaceChildren();const t=db.view.t,p=db.view.p,students=visibleStudents(),need=[];for(const st of students){const r=summary(t,p,st.id);for(const it of r.unresolved)need.push([st.name,r.missing.includes(it)?'حلّ موعدها':'مستقبلية',it])}const d1=e('details'),s1=e('summary','الخانات التي تحتاج إلى مراجعة ('+need.length+') — اضغط للعرض أو الإخفاء');d1.append(s1);const w1=e('div');w1.className='report-scroll';const tb=e('table');tb.className='group-report report-table';const hh=e('tr');['الطالب','النوع','الخانة / التاريخ'].forEach(x=>hh.append(e('th',x)));tb.append(hh);if(need.length)for(const row of need){const tr=e('tr');row.forEach(x=>tr.append(e('td',String(x))));tb.append(tr)}else{const tr=e('tr'),td=e('td','لا توجد خانات تحتاج إلى مراجعة.');td.colSpan=3;tr.append(td);tb.append(tr)}w1.append(tb);d1.append(w1);root.append(d1);const d2=e('details'),s2=e('summary','اعتماد نتائج الطلاب للفترة المعروضة ('+students.length+' طلاب) — اضغط للعرض أو الإخفاء');d2.append(s2);const w2=e('div');w2.className='report-scroll';const ta=e('table');ta.className='group-report report-table';const ha=e('tr');['الطالب','الحالة','النتيجة /٢٥','الاعتماد'].forEach(x=>ha.append(e('th',x)));ta.append(ha);for(const st of students){const r=summary(t,p,st.id),test=db.tests[tk(t,p,st.id)],total=r.complete&&test!==undefined&&r.periodScore!==null?Math.round((r.periodScore+test)*100)/100:null,k=tk(t,p,st.id),tr=e('tr');tr.append(e('td',st.name));tr.append(e('td',r.complete&&test!==undefined?'مكتمل':'غير مكتمل'));tr.append(e('td',total??'—'));const td=e('td'),btn=e('button',db.approvals[k]?'إلغاء الاعتماد':'اعتماد');btn.onclick=()=>{if(!r.complete||test===undefined)return say('لا يمكن الاعتماد: لدى الطالب خانات غير مكتملة أو لم تُدخل درجة الاختبار.',true);if(!db.approvals[k]&&!confirm('اعتماد نتيجة '+st.name+' لهذه الفترة؟'))return;db.approvals[k]=!db.approvals[k];logEvent('approval',(db.approvals[k]?'اعتُمدت':'أُلغي اعتماد')+' فترة القرآن للطالب «'+st.name+'».',st.studentUid);save();review()};td.append(btn);tr.append(td);ta.append(tr)}w2.append(ta);d2.append(w2);root.append(d2)}
+function report(){const body=$('reportBody');body.replaceChildren();$('max').value=db.quranShare;visibleStudents().forEach(s=>{const a=summary(db.view.t,0,s.id),b=summary(db.view.t,1,s.id),ta=db.tests[tk(db.view.t,0,s.id)],tb=db.tests[tk(db.view.t,1,s.id)],rawA=a.complete&&ta!==undefined&&a.finalScore!==null?a.finalScore+ta:null,rawB=b.complete&&tb!==undefined&&b.finalScore!==null?b.finalScore+tb:null,pa=rawA===null?null:Math.round(rawA*db.quranShare/25*100)/100,pb=rawB===null?null:Math.round(rawB*db.quranShare/25*100)/100,final=pa!==null&&pb!==null?Math.round((pa+pb)/2*100)/100:null;const tr=e('tr'),stars=starCounts(db.view.t,s.id);[s.name,(a.n+b.n)+' / '+(a.required+b.required),a.absent+b.absent,stars.distinguished,stars.early,a.pending+b.pending,a.finalScore===null&&a.score===null?'—':(a.finalScore??a.score)+(a.complete?'':' *'),ta??'—',pa??'—',b.finalScore===null&&b.score===null?'—':(b.finalScore??b.score)+(b.complete?'':' *'),tb??'—',pb??'—',final??'—'].forEach(x=>tr.append(e('td',String(x))));body.append(tr)})}
+const courseDefs={
+ islamic:[
+  {id:'participation',name:'المشاركة',count:10,max:1,kind:'check',star:true},
+  {id:'homework',name:'الواجبات',count:10,max:1,kind:'check',star:true},
+  {id:'interaction',name:'التفاعل',count:5,max:2,kind:'grade',star:true},
+  {id:'tests',name:'الاختبارات',count:5,max:10,weight:20,kind:'grade',test:true},
+  {id:'viol1',name:'مخالفات سلوكية',count:5,max:1,violation:true},
+  {id:'viol2',name:'عدم إحضار الكتاب',count:5,max:1,violation:true}
+ ],
+ tajweed:[
+  {id:'participation',name:'المشاركة',count:10,max:1,kind:'check',star:true},
+  {id:'homework',name:'الواجبات',count:10,max:1,kind:'check',star:true},
+  {id:'practical',name:'التطبيق العملي',count:5,max:6,kind:'grade',star:true},
+  {id:'enrichment',name:'الإثراء',count:5,max:4,kind:'grade',star:true},
+  {id:'tests',name:'الاختبارات التحريرية',count:3,max:10,kind:'grade',test:true},
+  {id:'viol1',name:'مخالفات سلوكية',count:5,max:1,violation:true},
+  {id:'viol2',name:'عدم إحضار الكتاب',count:5,max:1,violation:true}
+ ],
+ life:[
+  {id:'participation',name:'المشاركة',count:10,max:2,kind:'check'},
+  {id:'homework',name:'الواجبات',count:5,max:4,kind:'check'},
+  {id:'research',name:'البحوث والمشروعات والتقارير',count:5,max:4,kind:'check'},
+  {id:'activities',name:'التطبيقات والأنشطة الصفية',count:5,max:4,kind:'check'},
+  {id:'tests',name:'الاختبارات',count:2,max:10,kind:'grade',test:true}
+ ]};
+function ck(subject,t,p,id,cat,i){return [subject,t,p,id,cat,i].join('|')}
+function courseValue(subject,t,p,id,cat,i){const v=db.coursework[ck(subject,t,p,id,cat,i)];return v===undefined?null:Number(v)}
+function courseStarKey(subject,t,p,id,cat,i){return 'star|'+ck(subject,t,p,id,cat,i)}
+function courseCalc(subject,t,p,id){
+ const defs=courseDefs[subject],parts={};let missing=0,earned=0,baseMax=0,violations=0,stars=0;
+ for(const d of defs){let sum=0,filled=0;for(let i=0;i<d.count;i++){const v=courseValue(subject,t,p,id,d.id,i);if(v!==null){sum+=v;filled++}if(db.coursework[courseStarKey(subject,t,p,id,d.id,i)])stars++}
+  if(d.violation){violations+=sum;parts[d.id]={sum,filled,max:d.count};continue}
+  if(filled<d.count)missing+=d.count-filled;const rawMax=d.count*d.max,weighted=d.weight??rawMax;earned+=rawMax?sum/rawMax*weighted:0;baseMax+=weighted;parts[d.id]={sum,filled,max:rawMax,weighted}}
+ const deduction=Math.min(5,Math.floor(violations/2)),net=Math.max(0,earned-deduction),target=subject==='islamic'?100-db.quranShare:100,scaled=baseMax?Math.round(net/baseMax*target*100)/100:0;
+ return{parts,missing,violations,deduction,raw:Math.round(net*100)/100,baseMax,target,scaled,complete:missing===0,stars}
+}
+
+/* ===== التنقل بالأسهم في جميع كشوف رصد الدرجات ===== */
+function __focusAndSelect(el){
+ if(!el)return;
+ el.focus({preventScroll:true});
+ el.scrollIntoView({block:'nearest',inline:'nearest'});
+ if(el.matches('input'))el.select();
+}
+
+/* القرآن الكريم */
+function quranGradeGrid(){
+ return [...document.querySelectorAll('#body tr')].map(tr=>
+   [...tr.querySelectorAll('td.grade-cell')].filter(td=>td.querySelector('.grade-badge,.grade-editor'))
+ );
+}
+function quranArrowKey(ev){
+ const keys=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
+ if(!keys.includes(ev.key))return;
+ const inp=ev.currentTarget,td=inp.closest('td.grade-cell');
+ const grid=quranGradeGrid();
+ let r=-1,c=-1;
+ for(let i=0;i<grid.length;i++){const j=grid[i].indexOf(td);if(j>=0){r=i;c=j;break}}
+ if(r<0)return;
+ let nr=r,nc=c;
+ if(ev.key==='ArrowRight')nc--;
+ else if(ev.key==='ArrowLeft')nc++;
+ else if(ev.key==='ArrowUp')nr--;
+ else nr++;
+ const target=grid[nr]?.[nc];
+ if(!target)return;
+ const targetKey=target.dataset.gradeKey;
+ ev.preventDefault();ev.stopPropagation();
+ /* onchange يحفظ الدرجة الحالية ويعيد رسم الكشف */
+ inp.dispatchEvent(new Event('change',{bubbles:false}));
+ if(targetKey){edit=targetKey;register()}
+}
+
+/* اختبار القرآن */
+function testGradeGrid(){
+ return [...document.querySelectorAll('#testBody tr')].map(tr=>[...tr.querySelectorAll('input.test-grade-input')]);
+}
+function testArrowKey(ev){
+ if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(ev.key))return;
+ const inp=ev.currentTarget,g=testGradeGrid();
+ let r=-1,c=-1;
+ for(let i=0;i<g.length;i++){const j=g[i].indexOf(inp);if(j>=0){r=i;c=j;break}}
+ if(r<0)return;
+ let nr=r,nc=c;
+ if(ev.key==='ArrowRight')nc--;
+ else if(ev.key==='ArrowLeft')nc++;
+ else if(ev.key==='ArrowUp')nr--;
+ else nr++;
+ const target=g[nr]?.[nc];if(!target)return;
+ ev.preventDefault();ev.stopPropagation();
+ inp.dispatchEvent(new Event('change',{bubbles:false}));
+ __focusAndSelect(target);
+}
+
+/* الدراسات الإسلامية والتجويد */
+function courseGradeGrid(){
+ return [...document.querySelectorAll('#courseBody tbody tr')].map(tr=>
+   [...tr.cells].map(td=>td.querySelector('.direct-grade,.mark-btn')).filter(Boolean)
+ );
+}
+function courseArrowKey(ev){
+ if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(ev.key))return;
+ const control=ev.currentTarget,g=courseGradeGrid();
+ let r=-1,c=-1;
+ for(let i=0;i<g.length;i++){const j=g[i].indexOf(control);if(j>=0){r=i;c=j;break}}
+ if(r<0)return;
+ let nr=r,nc=c;
+ if(ev.key==='ArrowRight')nc--;
+ else if(ev.key==='ArrowLeft')nc++;
+ else if(ev.key==='ArrowUp')nr--;
+ else nr++;
+ if(!g[nr]?.[nc])return;
+ ev.preventDefault();ev.stopPropagation();
+ if(control.matches('input.direct-grade')){
+   control.dispatchEvent(new Event('change',{bubbles:false}));
+   setTimeout(()=>{const ng=courseGradeGrid();__focusAndSelect(ng[nr]?.[nc])},0);
+ }else{
+   __focusAndSelect(g[nr][nc]);
+ }
+}
+/* ===== نهاية التنقل بالأسهم ===== */
+
+function markCell(subject,t,p,st,d,i){const td=e('td'),stack=e('div');stack.className='mark-stack';const k=ck(subject,t,p,st.id,d.id,i),sk=courseStarKey(subject,t,p,st.id,d.id,i),v=db.coursework[k],refresh=()=>{save();coursework()},clear=()=>{delete db.coursework[k];delete db.coursework[sk];refresh()};if(d.violation){const x=e('button',v===1?'✕':'—');x.type='button';x.className='mark-btn mark-x';x.onkeydown=courseArrowKey;x.onclick=()=>{if(v===1)delete db.coursework[k];else db.coursework[k]=1;refresh()};stack.append(x);td.append(stack);return td}if(d.kind==='check'){const checked=Number(v)>0,x=e('button',checked?'✓':'—');x.type='button';x.className='mark-btn';x.onkeydown=courseArrowKey;x.onclick=()=>{if(checked)delete db.coursework[k];else db.coursework[k]=d.max;refresh()};stack.append(x)}else{const inp=e('input');inp.className='direct-grade';inp.onkeydown=courseArrowKey;inp.inputMode='decimal';inp.value=v??'';inp.placeholder='—';inp.onchange=()=>{const z=normal(inp.value.trim());if(z===''){clear();return}const n=Number(z);if(!Number.isFinite(n)||n<0||n>d.max){inp.value=v??'';return}db.coursework[k]=n;refresh()};stack.append(inp)}if(v!==undefined){const acts=e('div');acts.className='mark-actions';const del=e('button','ح');del.type='button';del.className='mark-action mark-del';del.onclick=clear;acts.append(del);if(d.star&&!d.test){const star=e('button','★');star.type='button';star.className='mark-action mark-star'+(db.coursework[sk]?' on':'');star.onclick=()=>{db.coursework[sk]=!db.coursework[sk];refresh()};acts.append(star)}stack.append(acts)}td.append(stack);return td}
+function courseGuideText(d){return d.violation?d.name+': كل مخالفتين يُحسم درجة واحدة.':d.kind==='check'?d.name+': كل علامة ✓ = درجة واحدة.':d.name+': الدرجة الكاملة لكل خانة '+d.max+' درجات.'}
+function unifiedPair(subject,t,p,d1,d2){const wrap=e('div');wrap.className='scroll unified-course';const table=e('table'),thead=e('thead'),top=e('tr');top.append(e('th','الطالب'));const g1=e('th',d1.name);g1.colSpan=d1.count+1;g1.className='group-title';top.append(g1);const g2=e('th',d2.name);g2.colSpan=d2.count+1;g2.className='group-title group-start';top.append(g2);thead.append(top);const nums=e('tr');nums.append(e('th','الاسم'));for(let i=0;i<d1.count;i++)nums.append(e('th',String(i+1)));nums.append(e('th','المجموع'));for(let i=0;i<d2.count;i++){const h=e('th',String(i+1));if(i===0)h.className='group-start';nums.append(h)}nums.append(e('th','المجموع'));thead.append(nums);table.append(thead);const body=e('tbody');for(const st of visibleStudents()){const tr=e('tr'),name=e('td');name.className='name-col';name.append(studentNameLink(st));tr.append(name);let x=0,y=0;for(let i=0;i<d1.count;i++){const v=courseValue(subject,t,p,st.id,d1.id,i);if(v!==null)x+=v;tr.append(markCell(subject,t,p,st,d1,i))}tr.append(e('td',String(x)));for(let i=0;i<d2.count;i++){const td=markCell(subject,t,p,st,d2,i);if(i===0)td.classList.add('group-start');const v=courseValue(subject,t,p,st.id,d2.id,i);if(v!==null)y+=v;tr.append(td)}tr.append(e('td',String(y)));body.append(tr)}table.append(body);wrap.append(table);return wrap}
+function singleCourse(subject,t,p,d){
+ const wrap=e('div');wrap.className='scroll unified-course';
+ const table=e('table'),thead=e('thead'),top=e('tr');
+ top.append(e('th','الطالب'));
+ const g=e('th',d.name);g.colSpan=d.count+1;g.className='group-title';top.append(g);
+ thead.append(top);
+ const nums=e('tr');nums.append(e('th','الاسم'));
+ for(let i=0;i<d.count;i++)nums.append(e('th',String(i+1)));
+ nums.append(e('th','المجموع'));thead.append(nums);table.append(thead);
+ const body=e('tbody');
+ for(const st of visibleStudents()){
+  const tr=e('tr'),name=e('td');name.className='name-col';name.append(studentNameLink(st));tr.append(name);
+  let sum=0;
+  for(let i=0;i<d.count;i++){
+   const v=courseValue(subject,t,p,st.id,d.id,i);if(v!==null)sum+=v;
+   tr.append(markCell(subject,t,p,st,d,i));
+  }
+  tr.append(e('td',String(sum)));body.append(tr);
+ }
+ table.append(body);wrap.append(table);
+ return wrap;
+}
+function hideCourseDeleteButtons(){
+ document.querySelectorAll('#courseBody .mark-del').forEach(b=>b.remove());
+ document.querySelectorAll('#courseBody .mark-actions').forEach(a=>{if(!a.children.length)a.remove()});
+}
+function coursework(){
+ const subject=db.activeSubject;if(subject==='quran')return;const {t,p}=db.view,defs=courseDefs[subject],host=$('courseBody');
+ $('courseTitle').textContent='رصد درجات '+subjectNames[subject]+' — '+db.activeSection;$('courseNote').textContent='';host.replaceChildren();
+ const m=Object.fromEntries(defs.map(d=>[d.id,d]));
+ const guidePair=(d1,d2)=>{const x=e('div',courseGuideText(d1)+'   —   '+courseGuideText(d2));x.className='course-guide';host.append(x);host.append(unifiedPair(subject,t,p,d1,d2))};
+ const guideSingle=d=>{const x=e('div',courseGuideText(d));x.className='course-guide';host.append(x);host.append(singleCourse(subject,t,p,d))};
+ if(subject==='islamic'){
+  guidePair(m.participation,m.homework);
+  guidePair(m.interaction,m.tests);
+  guidePair(m.viol1,m.viol2);
+ }else if(subject==='tajweed'){
+  guidePair(m.participation,m.homework);
+  guidePair(m.practical,m.enrichment);
+  guideSingle(m.tests);
+  guidePair(m.viol1,m.viol2);
+ }else if(subject==='life'){
+  guidePair(m.participation,m.homework);
+  guidePair(m.research,m.activities);
+  guideSingle(m.tests);
+ }
+ hideCourseDeleteButtons();
+}
+function groupAssessment(){const host=$('groupAssessmentBody');host.replaceChildren();const subject=db.activeSubject,t=db.view.t,p=db.view.p,wrap=e('div');wrap.className='report-scroll';const table=e('table');table.className='group-report report-table';if(subject==='quran'){const h=e('tr');['الطالب','التسميع /١٥','الاختبار /١٠','المجموع /٢٥','الحالة'].forEach(x=>h.append(e('th',x)));table.append(h);for(const st of visibleStudents()){const r=summary(t,p,st.id),test=db.tests[tk(t,p,st.id)],total=r.complete&&test!==undefined&&r.finalScore!==null?Math.round((r.finalScore+test)*100)/100:null,tr=e('tr');[st.name,r.finalScore??(r.complete?r.score:'—'),test??'—',total??'—',!r.complete?'غير مكتمل':r.approved?'معتمد':'مكتمل — غير معتمد'].forEach(x=>tr.append(e('td',String(x))));table.append(tr)}}else{const h=e('tr');['الطالب','النتيجة','الخانات المتبقية','المخالفات','الخصم','النجوم ★','الحالة'].forEach(x=>h.append(e('th',x)));table.append(h);for(const st of visibleStudents()){const c=courseCalc(subject,t,p,st.id),tr=e('tr');[st.name,c.complete?c.scaled+' / '+c.target:'—',c.missing,c.violations,c.deduction,c.stars,c.complete?'مكتمل':'غير مكتمل'].forEach(x=>tr.append(e('td',String(x))));table.append(tr)}}wrap.append(table);host.append(wrap)}
+function courseHasAcademicData(subject,t,p,id){
+ const c=courseCalc(subject,t,p,id);
+ return courseDefs[subject].some(d=>!d.violation&&(c.parts[d.id]?.filled||0)>0)
+}
+function quranPeriodScore(t,p,id){const r=summary(t,p,id),test=db.tests[tk(t,p,id)];if(!r.complete||test===undefined||r.finalScore===null)return null;const raw=r.finalScore+test;return Math.round(raw*db.quranShare/25*100)/100}
+function subjectStudents(subject){return db.students.filter(s=>(s.subject||'quran')===subject&&(s.section||db.sections[0])===db.activeSection&&(s.status||'active')==='active')}
+function subjectReport(subject){
+ const host=$(subject==='islamic'?'islamicReportBody':subject==='tajweed'?'tajweedReportBody':'lifeReportBody');host.replaceChildren();const t=db.view.t,arr=subjectStudents(subject);
+ const note=e('div');note.className='summary-card';note.textContent=(subject==='islamic'?'الدراسات الإسلامية وحدها دون القرآن.':subject==='tajweed'?'التجويد مستقل تمامًا عن القرآن والدراسات الإسلامية.':'المهارات الحياتية مستقلة، ومجموع كل فترة ١٠٠ درجة.')+' تظهر الدرجة المرصودة حاليًا حتى قبل اكتمال جميع الخانات، أما متوسط الفصل فلا يظهر إلا بعد اكتمال الفترتين.';host.append(note);
+ const wrap=e('div');wrap.className='report-scroll';const table=e('table');table.className='group-report report-table';const h=e('tr');
+ if(subject==='tajweed')['الطالب','الفترة الأولى /١٠٠','اختبارات الأولى /٣٠','مخالفات الأولى','خصم الأولى','الفترة الثانية /١٠٠','اختبارات الثانية /٣٠','مخالفات الثانية','خصم الثانية','متوسط الفصل /١٠٠'].forEach(x=>h.append(e('th',x)));
+ else if(subject==='life')['الطالب','الفترة الأولى /١٠٠','اختبارات الأولى /٢٠','الفترة الثانية /١٠٠','اختبارات الثانية /٢٠','متوسط الفصل /١٠٠'].forEach(x=>h.append(e('th',x)));
+ else ['الطالب','الفترة الأولى','الفترة الثانية','متوسط الفصل','مخالفات الفصل','الخصم','النجوم ★'].forEach(x=>h.append(e('th',x)));
+ table.append(h);
+ for(const st of arr){const c1=courseCalc(subject,t,0,st.id),c2=courseCalc(subject,t,1,st.id),h1=courseHasAcademicData(subject,t,0,st.id),h2=courseHasAcademicData(subject,t,1,st.id),v1=h1?c1.scaled:null,v2=h2?c2.scaled:null,avg=c1.complete&&c2.complete&&v1!==null&&v2!==null?Math.round((v1+v2)/2*100)/100:null,tr=e('tr');
+  if(subject==='tajweed'){const tests1=c1.parts.tests?.sum??0,tests2=c2.parts.tests?.sum??0;[st.name,v1??'—',tests1,c1.violations,c1.deduction,v2??'—',tests2,c2.violations,c2.deduction,avg??'—'].forEach(v=>tr.append(e('td',String(v))))}
+  else if(subject==='life'){const tests1=c1.parts.tests?.sum??0,tests2=c2.parts.tests?.sum??0;[st.name,v1??'—',tests1,v2??'—',tests2,avg??'—'].forEach(v=>tr.append(e('td',String(v))))}
+  else [st.name,v1??'—',v2??'—',avg??'—',c1.violations+c2.violations,c1.deduction+c2.deduction,c1.stars+c2.stars].forEach(v=>tr.append(e('td',String(v))));
+  table.append(tr)}
+ wrap.append(table);host.append(wrap)
+}
+function quranPeriodScoreForStudent(t,p,id){const r=summary(t,p,id),test=db.tests[tk(t,p,id)];if(!r.complete||test===undefined||r.finalScore===null)return null;return Math.round((r.finalScore+test)*db.quranShare/25*100)/100}
+function combinedReport(){
+ const host=$('combinedBody');host.replaceChildren();const t=db.view.t,qStudents=subjectStudents('quran'),iStudents=subjectStudents('islamic'),names=[...new Set([...qStudents,...iStudents].map(s=>cleanName(s.name)))],find=(arr,name)=>arr.find(s=>cleanName(s.name)===name);
+ const note=e('div');note.className='summary-card';note.textContent='القرآن '+db.quranShare+' + الدراسات الإسلامية '+(100-db.quranShare)+' = ١٠٠ في كل فترة. تظهر درجة الإسلامية المرصودة حاليًا، أما مجموع الفترة /١٠٠ فلا يظهر إلا بعد اكتمال واعتماد القرآن واكتمال خانات الإسلامية. التجويد لا يدخل في هذا التقرير.';host.append(note);
+ const wrap=e('div');wrap.className='report-scroll';const table=e('table');table.className='group-report report-table';const h=e('tr');
+ ['الطالب','القرآن الأولى','الإسلامية الأولى','مجموع الأولى /١٠٠','القرآن الثانية','الإسلامية الثانية','مجموع الثانية /١٠٠','متوسط الفصل /١٠٠'].forEach(x=>h.append(e('th',x)));table.append(h);
+ for(const name of names){const q=find(qStudents,name),i=find(iStudents,name),q1=q?quranPeriodScoreForStudent(t,0,q.id):null,q2=q?quranPeriodScoreForStudent(t,1,q.id):null,c1=i?courseCalc('islamic',t,0,i.id):null,c2=i?courseCalc('islamic',t,1,i.id):null,h1=i?courseHasAcademicData('islamic',t,0,i.id):false,h2=i?courseHasAcademicData('islamic',t,1,i.id):false,i1=c1&&h1?c1.scaled:null,i2=c2&&h2?c2.scaled:null,m1=q1!==null&&c1&&c1.complete&&i1!==null?Math.round((q1+i1)*100)/100:null,m2=q2!==null&&c2&&c2.complete&&i2!==null?Math.round((q2+i2)*100)/100:null,avg=m1!==null&&m2!==null?Math.round((m1+m2)/2*100)/100:null,tr=e('tr');[name,q1??'—',i1??'—',m1??'—',q2??'—',i2??'—',m2??'—',avg??'—'].forEach(v=>tr.append(e('td',String(v))));table.append(tr)}
+ wrap.append(table);host.append(wrap)
+}
+function download(filename,content,type){try{const url=URL.createObjectURL(new Blob([content],{type})),a=e('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);say('طُلب تنزيل الملف؛ تحقق من مجلد التنزيلات.')}catch(err){say('تعذّر التنزيل: '+err.message)}}// Import names locally: OOXML ZIP (xlsx/docx), CSV and UTF-8 text; no network libraries.
+async function zipEntries(file){const buf=await file.arrayBuffer(),dv=new DataView(buf),bytes=new Uint8Array(buf);let end=-1;for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--){if(dv.getUint32(i,true)===0x06054b50){end=i;break}}if(end<0)throw Error('الملف ليس ملف Excel أو Word صالحًا.');const count=dv.getUint16(end+10,true),start=dv.getUint32(end+16,true),decoder=new TextDecoder(),entries=new Map();let off=start;for(let n=0;n<count;n++){if(dv.getUint32(off,true)!==0x02014b50)throw Error('تعذّر قراءة بنية الملف.');const method=dv.getUint16(off+10,true),size=dv.getUint32(off+20,true),nameLen=dv.getUint16(off+28,true),extra=dv.getUint16(off+30,true),comment=dv.getUint16(off+32,true),local=dv.getUint32(off+42,true),name=decoder.decode(bytes.subarray(off+46,off+46+nameLen));entries.set(name,{method,size,local});off+=46+nameLen+extra+comment}return async name=>{const ent=entries.get(name);if(!ent)return null;const off=ent.local;if(dv.getUint32(off,true)!==0x04034b50)throw Error('تعذّر قراءة الملف الداخلي.');const dataStart=off+30+dv.getUint16(off+26,true)+dv.getUint16(off+28,true);const compressed=bytes.slice(dataStart,dataStart+ent.size);if(ent.method===0)return decoder.decode(compressed);if(ent.method!==8||!('DecompressionStream' in window))throw Error('تعذّر فك ضغط الملف في هذا المتصفح.');const stream=new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));return decoder.decode(await new Response(stream).arrayBuffer())}}
+function parseXml(source){const doc=new DOMParser().parseFromString(source,'application/xml');if(doc.getElementsByTagName('parsererror').length)throw Error('تعذّر قراءة محتوى الملف.');return doc}
+function byLocal(node,name){return [...node.getElementsByTagName('*')].filter(el=>el.localName===name)}
+function cleanName(x){return String(x).replace(/[\u200e\u200f\ufeff]/g,'').replace(/\s+/g,' ').trim()}
+function extractExcel(doc,shared){const rows=[];for(const row of byLocal(doc,'row')){const cells=[];for(const cell of byLocal(row,'c')){const ref=cell.getAttribute('r')||'',col=ref.match(/^[A-Z]+/i)?.[0]||'',index=[...col.toUpperCase()].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1;const type=cell.getAttribute('t'),v=byLocal(cell,'v')[0]?.textContent||'',inline=byLocal(cell,'is')[0];let value=type==='s'?shared[Number(v)]||'':type==='inlineStr'&&inline?byLocal(inline,'t').map(x=>x.textContent).join(''):type==='b'?'':v;if(index>=0&&index<100)cells[index]=value}rows.push(cells)}return rows}
+function chooseNames(rows){const names=[];for(const cells of rows){const values=cells.map(cleanName).filter(Boolean);if(!values.length)continue;const candidate=values.find(x=>/[\u0621-\u064a]/.test(x)&&!/^([\d\s]+|الاسم|اسم الطالب|اسم الطالبة|الرقم|م|الطلاب|الطالب|الشعبة|الصف|الدرجة|المجموع|ت|اسم|الاسم الكامل)$/i.test(x));if(candidate)names.push(candidate)}return names}
+async function namesFromFile(file){const ext=file.name.toLowerCase().split('.').pop();if(ext==='txt'||ext==='csv'){const raw=await file.text();const lines=raw.replace(/^\ufeff/,'').split(/\r?\n/);return chooseNames(lines.map(line=>ext==='csv'?line.split(/[;,\t]/):[line]))}if(ext!=='xlsx'&&ext!=='docx')throw Error('اختر ملف .xlsx أو .docx أو .csv أو .txt.');const read=await zipEntries(file);if(ext==='docx'){const source=await read('word/document.xml');if(!source)throw Error('تعذّر العثور على نص مستند Word.');const doc=parseXml(source);const paras=byLocal(doc,'p');return chooseNames(paras.map(p=>[byLocal(p,'t').map(x=>x.textContent).join('')]))}const workbook=await read('xl/workbook.xml');if(!workbook)throw Error('تعذّر العثور على أوراق Excel.');const wdoc=parseXml(workbook),sheet=byLocal(wdoc,'sheet')[0];if(!sheet)throw Error('ملف Excel لا يحتوي على ورقة عمل.');const relId=sheet.getAttribute('r:id')||sheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');const relSource=await read('xl/_rels/workbook.xml.rels');let sheetPath='xl/worksheets/sheet1.xml';if(relSource&&relId){const rel=byLocal(parseXml(relSource),'Relationship').find(x=>x.getAttribute('Id')===relId);if(rel){const target=rel.getAttribute('Target')||'';sheetPath=target.startsWith('/')?target.slice(1):target.startsWith('xl/')?target:'xl/'+target.replace(/^\.\//,'')}}const sheetXml=await read(sheetPath);if(!sheetXml)throw Error('تعذّر قراءة ورقة Excel الأولى.');const sharedXml=await read('xl/sharedStrings.xml'),shared=sharedXml?byLocal(parseXml(sharedXml),'si').map(si=>byLocal(si,'t').map(x=>x.textContent).join('')):[];return chooseNames(extractExcel(parseXml(sheetXml),shared))}
+$('namesFile').onchange=async ev=>{const file=ev.target.files?.[0];if(!file)return;try{const names=await namesFromFile(file);if(!names.length)throw Error('لم أجد أسماء عربية واضحة في الملف. تأكد أن الأسماء في الورقة الأولى أو في نص مستند Word.');$('namesText').value=names.join('\n');$('namesPreviewInfo').textContent='راجع الأسماء التالية وعدّلها إن لزم؛ كل سطر يمثل طالبًا واحدًا. لم يُضَف أي طالب بعد.';$('namesPreview').classList.remove('hide');say('استُخرجت '+names.length+' أسماء للمعاينة؛ راجعها قبل الإضافة.')}catch(err){$('namesPreview').classList.add('hide');say('تعذّر استخراج الأسماء: '+err.message,true)}finally{ev.target.value=''}};
+$('cancelNames').onclick=()=>{$('namesPreview').classList.add('hide');$('namesText').value='';say('أُلغي استيراد الأسماء دون تغيير قائمة الطلاب.')};
+$('confirmNames').onclick=()=>{const names=$('namesText').value.split(/\r?\n/).map(cleanName).filter(Boolean);if(!names.length)return say('قائمة الأسماء فارغة.',true);const existing=new Set(rosterStudents(db.activeSection).map(s=>cleanName(s.name))),seen=new Set(),unique=[];let duplicates=0;for(const name of names){if(existing.has(name)||seen.has(name)){duplicates++;continue}seen.add(name);unique.push(name)}if(!unique.length)return say('جميع الأسماء موجودة مسبقًا أو مكررة؛ لم يُضف أي طالب.',true);if(!confirm('هل تريد إضافة '+unique.length+' طالبًا إلى '+db.activeSection+' في جميع مواد الشعبة؟'+(duplicates?' سيُتجاوز '+duplicates+' اسمًا مكررًا.':'')))return;for(const name of unique){const studentUid=uid();for(const subject of sectionSubjects(db.activeSection))db.students.push({id:uid(),name,subject,section:db.activeSection,studentUid,status:'active'})}logEvent('bulk-add','أُضيف '+unique.length+' طالبًا إلى '+db.activeSection+' عن طريق الاستيراد.');save();students();$('namesPreview').classList.add('hide');$('namesText').value='';say('أُضيف '+unique.length+' طالبًا إلى جميع مواد الشعبة'+(duplicates?'، وتُجاوز '+duplicates+' اسمًا مكررًا.':'.'))};
+$('createSection').onclick=()=>{const input=$('newSection'),name=cleanName(input.value);if(!name)return say('اكتب اسم الشعبة الجديدة.',true);if(db.sections.includes(name))return say('هذه الشعبة موجودة بالفعل.',true);db.sections.push(name);db.activeSection=name;input.value='';save();render();say('أُنشئت الشعبة «'+name+'».')};$('add').onclick=()=>{const inp=$('newName'),name=inp.value.trim();if(!name)return say('اكتب اسم الطالب.');if(rosterStudents(db.activeSection).some(s=>cleanName(s.name)===cleanName(name)))return say('الطالب موجود في هذه الشعبة.',true);const studentUid=uid();for(const subject of sectionSubjects(db.activeSection))db.students.push({id:uid(),name,subject,section:db.activeSection,studentUid,status:'active'});inp.value='';logEvent('add','أُضيف الطالب «'+name+'» إلى '+db.activeSection+'.',studentUid);save();students();say('أُضيف الطالب إلى جميع مواد الشعبة.')};$('newName').onkeydown=ev=>{if(ev.key==='Enter')$('add').click()};$('max').onchange=ev=>{db.quranShare=Number(ev.target.value);db.max=db.quranShare;save();report()};$('csv').onclick=()=>{const rows=[...$('report').querySelectorAll('tr')].map(tr=>[...tr.children].map(c=>{let v=c.textContent.trim();if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'}).join(';'));download('تقرير-الصف.csv','\ufeffsep=;\r\n'+rows.join('\r\n'),'text/csv;charset=utf-8')};$('print').onclick=()=>window.print();$('download').onclick=()=>{db.lastBackupAt=new Date().toISOString();save();download('نسخة-احتياطية-سجل-الدرجات.json',JSON.stringify(db,null,2),'application/json;charset=utf-8')};
+function renderArchives(){const host=$('archiveList');if(!host)return;host.replaceChildren();for(const a of (db.archives||[])){const row=e('div',a.label+' — '+new Date(a.at).toLocaleString('ar-SA'));row.className='archive-item';host.append(row)}}
+$('archiveYear').onclick=()=>{const label=prompt('اكتب اسم الأرشيف، مثال: العام الدراسي 1448هـ');if(!label)return;const snapshot=JSON.parse(JSON.stringify(db));delete snapshot.archives;snapshot.auditLog=(snapshot.auditLog||[]).slice(0,100);const item={id:uid(),label:cleanName(label),at:new Date().toISOString()};db.archives=db.archives||[];db.archives.unshift(item);if(db.archives.length>20)db.archives.length=20;logEvent('archive','أُنشئ أرشيف «'+item.label+'».');save();download('أرشيف-'+item.label.replace(/[\\/:*?"<>|]/g,'-')+'.json',JSON.stringify({archive:item,data:snapshot},null,2),'application/json;charset=utf-8');renderArchives()};$('import').onchange=async ev=>{const file=ev.target.files?.[0];if(!file)return;try{const x=JSON.parse(await file.text());if(!valid(x))throw Error('صيغة النسخة غير صالحة');x.holidays=x.holidays||{};x.approvals=x.approvals||{};const conflicts=Object.keys(x.absences).filter(k=>x.absences[k]&&Object.prototype.hasOwnProperty.call(x.grades,k)).length;if(!confirm('سيتم استبدال جميع البيانات الحالية. هل تريد المتابعة؟'))return;db=migrate(x);edit='';save();render();say('استُوردت النسخة الاحتياطية.'+(conflicts?' حُسم '+conflicts+' تعارض بين درجة وغياب لصالح الغياب.':''))}catch(err){say('تعذّر الاستيراد: '+err.message)}finally{ev.target.value=''}};try{
+ const saved=localStorage.getItem('quran-last-tab');
+ if(saved){
+   tab=saved;
+   if(saved==='students')localStorage.setItem('quran-main-area','students');else if(['parentPortal','parentMessages'].includes(saved))localStorage.setItem('quran-main-area','parents');
+   else if(['syncDevices','backup'].includes(saved))localStorage.setItem('quran-main-area','data');
+   else localStorage.setItem('quran-main-area','study');
+ }
+}catch(_){}
+render();if(!storageOK)say('التخزين المحلي غير متاح.');
+
+window.addEventListener('message',ev=>{
+ const m=ev.data;if(!m||!m.studentUid)return;
+ if(m.type==='quran-rename-student'){const master=studentMasterByUid(m.studentUid),name=cleanName(m.name||'');if(!master||!name)return;const oldName=master.name;for(const x of db.students)if(x.studentUid===m.studentUid)x.name=name;logEvent('rename','عُدّل اسم الطالب من «'+oldName+'» إلى «'+name+'».',m.studentUid);save();render();say('عُدّل اسم الطالب في جميع المواد.');return}
+ if(m.type==='quran-update-support'){const s=supportFor(m.studentUid),v=m.support||{};for(const k of ['teacherNote','privateNote','goal','praise','enrichmentPlan','enrichmentTasks','remedialPlan','remedialTasks'])s[k]=String(v[k]||'').trim();s.contactNeeded=!!v.contactNeeded;if(v.level)s.level=v.level;if(s.level!=='remedial'){s.remedialPlan='';s.remedialTasks=''}logEvent('support','حُدث ملف متابعة الطالب «'+(studentMasterByUid(m.studentUid)?.name||'')+'».',m.studentUid);save();render();say('حُفظت متابعة الطالب.');}
+});
+
+window.__app={db,save,tk,key,summary,courseCalc,courseHasAcademicData,quranPeriodScoreForStudent,subjectStudents,visibleStudents,cleanName,subjectNames,courseDefs,buildDetailedStudentReport,buildAllSemesterStudentReport,render};
+
+window.dispatchEvent(new Event('app-ready'));
+})();
+</script><script src="./parent-sync.js?v=20260929-master-roster-life"></script></html>

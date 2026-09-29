@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>بوابة ولي الأمر — سجل درجات الطلاب</title>
+<style>
+  body{font:16px Tahoma,Arial;background:#f4f7f5;color:#193d34;margin:0;padding:20px}
+  header{background:#205348;color:#fff;padding:18px 20px;border-radius:12px;margin-bottom:16px}
+  section{background:#fff;border:1px solid #d6e3dd;border-radius:10px;padding:16px;margin:12px 0;max-width:640px}
+  button,input{font:inherit;padding:9px;margin:4px 0;border:1px solid #aac1b4;border-radius:7px;width:100%;box-sizing:border-box}
+  button{cursor:pointer;background:#205348;color:#fff;border-color:#205348}
+  button.secondary{background:#fff;color:#205348}
+  .muted{font-size:13px;color:#526b60}
+  .error{color:#b42318;font-weight:bold}
+  .card{background:#f7faf8;border:1px solid #d6e3dd;border-radius:9px;padding:12px;margin:10px 0}
+  table{border-collapse:collapse;width:100%;margin-top:8px}
+  th,td{border:1px solid #d6e3dd;padding:6px;text-align:center;font-size:14px}
+  th{background:#e9f1ed}
+  h3{margin-top:0}
+  .tabs{display:flex;gap:8px;margin-bottom:10px}
+  .tabs button{width:auto;flex:1}
+  .tabs button.active{background:#193d34}
+
+  .chat{max-height:320px;overflow:auto;background:#f7faf8;border:1px solid #d6e3dd;border-radius:9px;padding:8px;margin-top:8px}
+  .bubble{padding:8px 10px;border-radius:10px;margin:6px 0;max-width:84%;word-break:break-word}
+  .bubble.parent{margin-right:auto;background:#dfeee8}
+  .bubble.teacher{margin-left:auto;background:#fff;border:1px solid #d6e3dd}
+  textarea{font:inherit;padding:9px;border:1px solid #aac1b4;border-radius:7px;width:100%;box-sizing:border-box;resize:vertical}
+
+  .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin:10px 0}
+  .metric{background:#fff;border:1px solid #d6e3dd;border-radius:8px;padding:9px;text-align:center}
+  .metric b{display:block;font-size:19px;margin-top:4px}
+  .daily-wrap{overflow:auto;max-height:520px}.daily-table{min-width:760px}
+  .plan{white-space:pre-wrap;line-height:1.8}
+  .warning-card{background:#fff8ed;border-color:#e7c98b}
+  .good-card{background:#f3fbf6;border-color:#b9ddc5}
+  details.card>summary{cursor:pointer;font-weight:bold}
+
+.report-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}.report-controls button.active{background:#1e5b4e;color:#fff}.hidden-view{display:none!important}.rank-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.badge-good,.badge-need{display:inline-block;padding:5px 9px;border-radius:999px;margin:3px}.badge-good{background:#e8f6ed}.badge-need{background:#fff1e8}.new-pill{background:#b3261e;color:#fff;border-radius:999px;padding:2px 7px;font-size:12px}.timeline{border-right:3px solid #d6e3dd;padding-right:12px}.timeline-item{padding:7px;margin:6px 0;background:#fff;border-radius:8px}
+
+.teacher-followup{background:#fff;border:2px solid #aac1b4}.teacher-followup label{display:block;font-weight:bold;margin-top:10px}.teacher-followup input,.teacher-followup textarea,.teacher-followup select{width:100%;box-sizing:border-box;margin-top:5px}.teacher-followup .checkline{display:flex;gap:8px;align-items:center}.teacher-followup .checkline input{width:auto}.teacher-followup-actions{display:flex;gap:8px}.teacher-followup-actions button{width:auto}.save-ok{font-weight:bold;color:#17633f}
+
+.report-view{border:2px solid #205348;border-radius:12px;padding:14px;margin:12px 0;background:#fff}.report-view-title{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.report-controls button{width:auto!important;min-width:135px}.report-controls select{font:inherit;padding:7px;border:1px solid #aac1b4;border-radius:7px}.teacher-followup{scroll-margin-top:12px}
+
+.subject-level-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:12px}
+.subject-level-card{border:1px solid #cfded7;border-radius:12px;padding:12px;background:#fff}
+.subject-level-card h4{margin:0 0 8px}
+.subject-level-main{font-weight:800;font-size:1.15rem;margin:5px 0}
+.subject-level-score{font-weight:700;margin:5px 0}
+.overall-level{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px;border:1px solid #cfded7;border-radius:12px;background:#fff}
+.overall-level b{font-size:1.25rem}
+
+/* ===== تحسين العرض العريض لملف الطالب — مبني على الحزمة الأخيرة المرفوعة فقط ===== */
+:root{--page-pad:clamp(14px,2.2vw,34px);--panel-gap:clamp(12px,1.5vw,22px)}
+html,body{width:100%;max-width:none;margin:0}
+body{overflow-x:hidden;padding:0!important}
+header{width:auto;margin:24px var(--page-pad) 18px!important;border-radius:18px!important;padding:22px clamp(18px,3vw,42px)!important}
+section{width:auto!important;max-width:none!important;box-sizing:border-box;margin:14px var(--page-pad)!important;padding:clamp(16px,2vw,30px)!important;border-radius:16px!important}
+#reportsBox,#authBox{width:100%!important;max-width:none!important;margin:0!important}
+#reportsBox>section{width:auto!important;max-width:none!important;margin:14px var(--page-pad)!important}
+#reportsBox>section>h2{font-size:clamp(1.55rem,2.3vw,2.35rem);margin:0 0 14px}
+.card{box-sizing:border-box;width:100%;margin:var(--panel-gap) 0;padding:clamp(16px,1.8vw,26px);border-radius:16px}
+.report-controls{display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap;width:100%;box-sizing:border-box;padding:14px 16px;margin:14px 0 20px;border:1px solid #d5e2dc;border-radius:14px;background:#f8fbf9}
+.report-controls>b{font-size:1.05rem}
+.report-controls button{width:auto!important;min-width:170px;min-height:46px;padding:8px 20px}
+.report-controls label{display:flex;align-items:center;gap:8px;margin:0}
+.report-controls select{min-width:120px}
+.summary-grid,.subject-level-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:var(--panel-gap)!important}
+.subject-level-card,.metric{min-width:0}
+.overall-level{display:grid!important;grid-template-columns:minmax(220px,1fr) auto auto;gap:18px;align-items:center}
+table{width:100%;max-width:100%}
+#teacherFollowupMount{width:100%}
+button#renameStudentBtn{width:auto!important;min-width:150px!important;display:inline-flex!important;margin-inline-start:12px!important;padding:8px 18px!important;font-size:.95rem!important;vertical-align:middle}
+@media(max-width:1100px){
+ .summary-grid,.subject-level-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:700px){
+ :root{--page-pad:10px}
+ header{margin:0 0 12px!important;border-radius:0!important;padding:18px 14px!important}
+ section,#reportsBox>section{margin:10px!important;padding:12px!important}
+ .summary-grid,.subject-level-grid{grid-template-columns:1fr!important}
+ .overall-level{grid-template-columns:1fr!important}
+ .report-controls{align-items:stretch}
+ .report-controls button,.report-controls label,.report-controls select{width:100%!important}
+ button#renameStudentBtn{display:block!important;margin:10px 0 0!important;width:100%!important}
+}
+@media print{
+ header,.report-controls,#renameStudentBtn,#teacherFollowupMount{display:none!important}
+ section,#reportsBox>section{margin:0!important;width:100%!important;max-width:none!important;padding:0!important}
+ .card{break-inside:avoid}
+}
+
+</style>
+<body>
+<header><h2 style="margin:0">بوابة ولي الأمر</h2><span class="muted" style="color:#dfeee8">متابعة درجات ابنك أولاً بأول</span></header>
+
+<section id="authBox"></section>
+<section id="reportsBox" style="display:none"></section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ============================================================
+// عبّئ نفس القيمتين المستخدمتين في parent-sync.js:
+// ============================================================
+const SUPABASE_URL = 'https://bobjfngkrepajfsmaihk.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_tlHAjfYiVXXq81ponT7E-g_fniIquBM';
+// ============================================================
+
+let supa = null;
+const authBox = document.getElementById('authBox');
+const reportsBox = document.getElementById('reportsBox');
+const urlCode = new URLSearchParams(location.search).get('code');
+
+function periodLabel(i){return i===0?'الأولى':'الثانية'}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+let reportMode=localStorage.getItem('parent-report-mode')||'short',reportSemester=Number(localStorage.getItem('parent-report-semester')||0),reportPeriod=Number(localStorage.getItem('parent-report-period')||0);
+function rankText(r){return r?`${r.rank} من ${r.total}`:'لا توجد بيانات كافية'}
+function renderControls(){return `<div class="report-controls"><b>نوع التقرير:</b><button id="shortReportBtn" type="button" class="${reportMode==='short'?'active':''}">التقرير المختصر</button><button id="expandedReportBtn" type="button" class="${reportMode==='expanded'?'active':''}">التقرير الموسع</button><label>الفصل <select id="repSem"><option value="0"${reportSemester===0?' selected':''}>الأول</option><option value="1"${reportSemester===1?' selected':''}>الثاني</option></select></label><label>الفترة <select id="repPeriod"><option value="0"${reportPeriod===0?' selected':''}>الأولى</option><option value="1"${reportPeriod===1?' selected':''}>الثانية</option></select></label></div>`}
+function renderQuran(q){if(!q)return '';const st=q.stats||{},counts=st.gradeCounts||{},pr=(q.ranks?.periods||[]).find(x=>x.period===reportPeriod+1)?.rank,wr=(q.ranks?.weeks||[]).filter(x=>x.period===reportPeriod+1).map(x=>`<div class="metric"><span>الأسبوع ${x.week}</span><b>${rankText(x.rank)}</b></div>`).join(''),metrics=[['المجموع حتى الآن',(st.totalEarned??0)+' / '+(st.totalPossible??0)],['متوسط آخر 10',st.last10Average===null?'—':st.last10Average+' / 7'],['اتجاه المستوى',st.trend||'—'],['أفضل سلسلة 7/7',st.bestStreak??0],['الانتظام',st.attendanceRate===null?'—':st.attendanceRate+'%'],['التسميع المبكر',st.early??0],['المعدّل',st.modified??0],['عُوّض بعد غياب',st.madeUpAbsence??0],['غياب غير معوض',st.currentAbsence??0]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join(''),grades=[7,6,5,4,3,2,1,0].map(n=>`<div class="metric"><span>درجة ${n}</span><b>${counts[n]??0} مرة</b></div>`).join(''),daily=(q.daily||[]).filter(r=>r.period===reportPeriod+1).map(r=>`<tr><td>${r.weekName}</td><td>${r.day}</td><td>${r.value===null?'—':r.value+' / 7'}</td><td>${escapeHtml(r.status)}</td></tr>`).join(''),p=(q.periods||[]).find(x=>x.period===reportPeriod+1)||{};return `<div class="card"><h3>القرآن الكريم</h3><div class="summary-grid">${metrics}</div><div class="metric"><span>ترتيبه في الفترة</span><b>${rankText(pr)}</b></div><div class="expanded-only"><h4>ترتيبه لكل أسبوع</h4><div class="rank-grid">${wr}</div><h4>توزيع الدرجات</h4><div class="summary-grid">${grades}</div><table><tr><th>التسميع</th><th>الاختبار</th><th>المجموع</th></tr><tr><td>${p.score??'—'} / 15</td><td>${p.test??'—'} / 10</td><td>${p.periodScore??'—'} / 25</td></tr></table><details class="card"><summary>السجل اليومي من أول يوم</summary><div class="daily-wrap"><table class="daily-table"><tr><th>الأسبوع</th><th>اليوم</th><th>الدرجة</th><th>الحالة</th></tr>${daily||'<tr><td colspan="4">لا يوجد رصد.</td></tr>'}</table></div></details></div></div>`}
+function renderCourse(title,key,rows,ranks){if(!rows)return '';const r=rows.find(x=>x.period===reportPeriod+1);if(!r)return '';const rank=(ranks||[]).find(x=>x.period===reportPeriod+1)?.rank,cats=(r.categories||[]).map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${c.violation?c.earned+' مخالفة':c.earned+' / '+c.max}</td><td>${c.violation?'—':'المرصود '+c.filled+' من '+c.count+(c.remaining?' — المتبقي '+c.remaining:'')}</td></tr>`).join(''),score=r.scaled!==null&&r.scaled!==undefined?r.scaled+' / '+r.target:'لم يبدأ الرصد';return `<div class="card"><h3>${title}</h3><div class="summary-grid"><div class="metric"><span>نتيجة الفترة</span><b>${score}</b></div><div class="metric"><span>ترتيبه في الفترة</span><b>${rankText(rank)}</b></div><div class="metric"><span>المخالفات</span><b>${r.violations??0}</b></div></div><div class="expanded-only"><table><tr><th>البند</th><th>الحاصل</th><th>حالة الرصد</th></tr>${cats}</table></div></div>`}
+function levelLabel(pct){
+ if(pct===null||pct===undefined||!Number.isFinite(pct))return 'لم يبدأ الرصد بعد';
+ if(pct>=92)return 'مرتفع جدًا';
+ if(pct>=80)return 'مرتفع';
+ if(pct>=65)return 'جيد';
+ if(pct>=50)return 'متوسط';
+ return 'يحتاج متابعة';
+}
+function quranCurrentLevel(rep){
+ const rows=(rep?.quran?.daily||[]).filter(r=>r.period===reportPeriod+1&&r.value!==null&&r.value!==undefined);
+ if(!rows.length)return {label:'لم يبدأ الرصد بعد',pct:null,earned:0,possible:0,count:0,detail:'لا يوجد تسميع مرصود في الفترة المختارة.'};
+ const earned=rows.reduce((a,r)=>a+Number(r.value||0),0),possible=rows.length*7,pct=possible?earned/possible*100:null;
+ return {label:levelLabel(pct),pct,earned,possible,count:rows.length,detail:`${earned} من ${possible} في ${rows.length} تسميعات مرصودة`};
+}
+function courseCurrentLevel(rows){
+ const r=(rows||[]).find(x=>x.period===reportPeriod+1);if(!r)return {label:'لا يدرس المادة',pct:null,earned:0,possible:0,count:0,detail:'—',cats:[]};
+ let earned=0,possible=0,count=0;
+ const cats=(r.categories||[]).filter(c=>!c.violation).map(c=>{
+   const maxPer=c.count?c.max/c.count:0;
+   const observedMax=(c.filled||0)*maxPer;
+   earned+=Number(c.earned||0);possible+=observedMax;count+=Number(c.filled||0);
+   return {...c,observedMax};
+ });
+ const pct=possible?earned/possible*100:null;
+ return {label:levelLabel(pct),pct,earned,possible,count,detail:possible?`${Math.round(earned*100)/100} من ${Math.round(possible*100)/100} مما تم رصده`:'لم يبدأ الرصد بعد',cats,violations:r.violations||0,deduction:r.deduction||0,stars:r.stars||0};
+}
+function renderMissingTable(list){
+  if(!list.length) return '<p>لا يظهر نقص مستحق حاليًا.</p>';
+  const rowPattern=/^(.+?) — الفترة (الأولى|الثانية) — (.+?): متبقٍ (\d+) من (\d+)\.$/;
+  const rows=[], notes=[];
+  for(const x of list){
+    const m=String(x).match(rowPattern);
+    if(m) rows.push({subject:m[1],period:m[2],item:m[3],remaining:m[4],count:m[5]});
+    else notes.push(x);
+  }
+  const notesHtml=notes.length?`<ul>${notes.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:'';
+  if(!rows.length) return notesHtml||'<p>لا يظهر نقص مستحق حاليًا.</p>';
+  const table=`<table><tr><th>المادة</th><th>الفترة</th><th>البند</th><th>المتبقي</th></tr>${
+    rows.map(r=>`<tr><td>${escapeHtml(r.subject)}</td><td>${escapeHtml(r.period)}</td><td>${escapeHtml(r.item)}</td><td>${r.remaining} من ${r.count}</td></tr>`).join('')
+  }</table>`;
+  return notesHtml+table;
+}
+function subjectLevelCard(title,obj,extra=''){
+ const pct=obj.pct===null?'—':Math.round(obj.pct*10)/10+'%';
+ return `<div class="subject-level-card"><h4>${title}</h4><div class="subject-level-main">${obj.label}</div><div class="subject-level-score">${obj.detail}</div><div class="muted">النسبة من الرصد الحالي: ${pct}</div>${extra}</div>`;
+}
+function overallCurrentLevel(rep){
+ const vals=[];
+ const q=quranCurrentLevel(rep);if(q.pct!==null)vals.push(q.pct);
+ for(const key of ['islamic','tajweed','life']){const x=courseCurrentLevel(rep[key]);if(x.pct!==null)vals.push(x.pct)}
+ if(!vals.length)return {pct:null,label:'لم يبدأ الرصد بعد'};
+ const pct=vals.reduce((a,b)=>a+b,0)/vals.length;return {pct,label:levelLabel(pct)};
+}
+function renderFollowup(rep){
+ const sp=rep.support||{},manual=sp.level==='distinguished'?'متميز':sp.level==='remedial'?'خطة تحسين ومتابعة':'متابعة عادية';
+ const q=quranCurrentLevel(rep),isl=courseCurrentLevel(rep.islamic),taj=courseCurrentLevel(rep.tajweed),life=courseCurrentLevel(rep.life),overall=overallCurrentLevel(rep);
+ const qExtra=q.count?`<div class="muted">متوسط التسميع: ${(q.earned/q.count).toFixed(2)} / 7</div>`:'';
+ const islExtra=isl.pct===null?'':`<div class="muted">المخالفات: ${isl.violations} — الخصم: ${isl.deduction}</div>`;
+ const tajExtra=taj.pct===null?'':`<div class="muted">المخالفات: ${taj.violations} — الخصم: ${taj.deduction}</div>`;
+ const subjectCards=`<div class="subject-level-grid">${subjectLevelCard('القرآن الكريم',q,qExtra)}${subjectLevelCard('الدراسات الإسلامية',isl,islExtra)}${subjectLevelCard('التجويد',taj,tajExtra)}${life.label!=='لا يدرس المادة'?subjectLevelCard('المهارات الحياتية',life):''}</div>`;
+ const strengths=(rep.strengths||[]).map(x=>`<span class="badge-good">✓ ${escapeHtml(x)}</span>`).join('')||'<span class="muted">ستظهر مع تقدم الرصد.</span>',
+ needs=(rep.needs||[]).map(x=>`<span class="badge-need">${escapeHtml(x)}</span>`).join('')||'<span class="muted">لا توجد ملاحظة بارزة حاليًا.</span>',
+ missing=renderMissingTable(rep.missing||[]),
+ note=sp.teacherNote?`<div class="card"><h3>ملاحظة المعلم</h3>${escapeHtml(sp.teacherNote)}</div>`:'',
+ praise=sp.praise?`<div class="card good-card"><h3>إشادة من المعلم</h3>${escapeHtml(sp.praise)}</div>`:'',
+ goal=sp.goal?`<div class="card"><h3>الهدف الحالي</h3>${escapeHtml(sp.goal)}</div>`:'',
+ enrich=sp.enrichmentPlan?`<div class="card good-card"><h3>خطة الإثراء</h3><div class="plan">${escapeHtml(sp.enrichmentPlan)}</div></div>`:'',
+ rem=sp.level==='remedial'?`<div class="card warning-card"><h3>خطة التحسين والمتابعة</h3><div class="plan">${escapeHtml(sp.remedialPlan||'لم تُكتب الخطة بعد.')}</div></div>`:'';
+ return `<div class="card overall-level-card"><h3>المستوى الحالي في جميع المواد</h3><div class="overall-level"><span>المستوى العام من الرصد الحالي</span><b>${overall.label}</b>${overall.pct===null?'':`<strong>${Math.round(overall.pct*10)/10}%</strong>`}</div><p class="muted">يُحسب من الدرجات التي رُصدت فعليًا في الفترة المختارة، ولا يحسب الخانات التي لم يحن رصدها بعد على أنها صفر.</p>${subjectCards}</div>${note}${praise}${goal}<div class="card"><h3>ملخص المتابعة</h3><div class="metric"><span>تصنيف المعلم اليدوي</span><b>${manual}</b></div><h4>نقاط القوة</h4>${strengths}<h4>ما يحتاج إلى تحسين</h4>${needs}</div><div class="card expanded-only"><h3>ماذا ينقصه الآن؟</h3>${missing}</div>${enrich}${rem}`;
+}
+function renderTimeline(rep){const items=(rep.quran?.daily||[]).filter(r=>r.period===reportPeriod+1).slice(-20).reverse();return `<div class="card expanded-only"><h3>السجل الزمني</h3><div class="timeline">${items.map(r=>`<div class="timeline-item"><b>${r.weekName} — ${r.day}</b><br>${r.value===null?'—':r.value+' / 7'} — ${escapeHtml(r.status)}</div>`).join('')||'لا توجد أحداث.'}</div></div>`}
+function renderStudentCard(row){const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,updated=rep.generatedAt?new Date(rep.generatedAt).toLocaleString('ar-SA'):'لم تُحدَّث بعد';if(all.support?.portalEnabled===false||rep.support?.portalEnabled===false)return `<section><h2>${escapeHtml(row.full_name||all.name||'الطالب')}</h2><div class="card warning-card">بوابة المتابعة موقوفة مؤقتًا.</div></section>`;const last=localStorage.getItem('parent-last-report-'+row.id),isNew=!last||new Date(rep.generatedAt)>new Date(last||0);localStorage.setItem('parent-last-report-'+row.id,new Date().toISOString());return `<section><h2>${escapeHtml(row.full_name||all.name||rep.name||'الطالب')} ${isNew?'<span class="new-pill">جديد</span>':''}</h2><p class="muted">الشعبة: ${escapeHtml(rep.section||all.section||'—')} — آخر تحديث: ${updated}</p><div class="card"><b>تقارير المتابعة</b><p class="muted">التقريران يعملان من أول رصد مهما كان قليلًا. المختصر يعرض الملخص الحالي، والموسع يضيف السجل اليومي والإحصاءات والتفاصيل والترتيب. بعض المؤشرات ستكتب «لا توجد بيانات كافية» حتى يزداد الرصد.</p></div>${renderControls()}<div id="activeReport" class="report-view"><div class="report-view-title"><h3 id="activeReportTitle">${reportMode==='expanded'?'التقرير الموسع':'التقرير المختصر'}</h3><span class="muted">الفصل ${reportSemester===0?'الأول':'الثاني'} — الفترة ${reportPeriod===0?'الأولى':'الثانية'}</span></div>${renderFollowup(rep)}${renderQuran(rep.quran)}${renderCourse('الدراسات الإسلامية','islamic',rep.islamic,rep.courseRanks?.islamic)}${renderCourse('التجويد','tajweed',rep.tajweed,rep.courseRanks?.tajweed)}${renderCourse('المهارات الحياتية','life',rep.life,rep.courseRanks?.life)}${renderTimeline(rep)}</div><div class="card parent-chat-card" data-student="${escapeHtml(row.id)}"><b>مراسلة المعلم</b><div class="chat"><p class="muted">جارٍ تحميل المحادثة...</p></div><textarea rows="2" placeholder="اكتب رسالتك للمعلم..."></textarea><button type="button" class="send-msg">إرسال الرسالة</button><span class="muted msg-status"></span></div></section>`}
+let __currentReportRows=null,__teacherPreviewRow=null;
+function rerenderCurrentReport(){
+ if(__teacherPreviewRow){renderTeacherPreviewRow(__teacherPreviewRow);return}
+ if(__currentReportRows){
+   reportsBox.innerHTML=__currentReportRows.map(renderStudentCard).join('');
+   wireReportControls(rerenderCurrentReport);
+   wireParentChats();
+ }
+}
+function applyReportMode(){
+ const expanded=reportMode==='expanded';
+ document.querySelectorAll('.expanded-only').forEach(x=>x.style.display=expanded?'':'none');
+ const a=document.getElementById('shortReportBtn'),b=document.getElementById('expandedReportBtn');if(a)a.classList.toggle('active',!expanded);if(b)b.classList.toggle('active',expanded);
+ const title=document.getElementById('activeReportTitle');if(title)title.textContent=expanded?'التقرير الموسع':'التقرير المختصر';
+}
+function wireReportControls(rerender){
+ const changeMode=mode=>{reportMode=mode;localStorage.setItem('parent-report-mode',mode);rerender();setTimeout(()=>document.getElementById('activeReport')?.scrollIntoView({behavior:'smooth',block:'start'}),0)};
+ const short=document.getElementById('shortReportBtn'),expanded=document.getElementById('expandedReportBtn');if(short)short.onclick=()=>changeMode('short');if(expanded)expanded.onclick=()=>changeMode('expanded');
+ const sem=document.getElementById('repSem'),per=document.getElementById('repPeriod');if(sem)sem.onchange=()=>{reportSemester=Number(sem.value);localStorage.setItem('parent-report-semester',reportSemester);rerender()};if(per)per.onchange=()=>{reportPeriod=Number(per.value);localStorage.setItem('parent-report-period',reportPeriod);rerender()};applyReportMode();
+}
+function chatTime(v){try{return new Date(v).toLocaleString('ar-SA')}catch(_){return v||''}}
+
+async function loadParentChat(card,studentId){
+  const chat=card.querySelector('.chat');
+  const {data,error}=await supa.from('parent_messages').select('*').eq('student_id',studentId).order('created_at',{ascending:true});
+  if(error){chat.innerHTML='<p class="error">تعذّر تحميل الرسائل: '+escapeHtml(error.message)+'</p>';return;}
+  chat.replaceChildren();
+  if(!data?.length){chat.innerHTML='<p class="muted">لا توجد رسائل بعد. يمكنك بدء المحادثة مع المعلم.</p>';}
+  for(const m of data||[]){
+    const div=document.createElement('div');
+    div.className='bubble '+(m.sender_role==='parent'?'parent':'teacher');
+    div.innerHTML=`<div>${escapeHtml(m.body)}</div><div class="muted" style="font-size:11px;margin-top:4px">${m.sender_role==='parent'?'أنت':'المعلم'} — ${chatTime(m.created_at)}</div>`;
+    chat.appendChild(div);
+  }
+  chat.scrollTop=chat.scrollHeight;
+  const unread=(data||[]).filter(m=>m.sender_role==='teacher'&&!m.read_at).map(m=>m.id);
+  if(unread.length) await supa.rpc('mark_messages_read',{p_ids:unread});
+}
+
+async function wireParentChats(){
+  const {data:{user}}=await supa.auth.getUser();
+  for(const card of document.querySelectorAll('.parent-chat-card')){
+    const studentId=card.dataset.student;
+    await loadParentChat(card,studentId);
+    card.querySelector('.send-msg').onclick=async()=>{
+      const ta=card.querySelector('textarea'),status=card.querySelector('.msg-status'),body=ta.value.trim();
+      if(!body){status.textContent='اكتب الرسالة أولًا.';return;}
+      status.textContent='جارٍ الإرسال...';
+      const {error}=await supa.from('parent_messages').insert({
+        student_id:studentId,parent_uid:user.id,sender_role:'parent',body
+      });
+      if(error){status.textContent='تعذّر الإرسال: '+error.message;return;}
+      ta.value='';status.textContent='تم الإرسال.';await loadParentChat(card,studentId);
+    };
+  }
+  if(window.__parentMsgTimer) clearInterval(window.__parentMsgTimer);
+  window.__parentMsgTimer=setInterval(()=>{
+    document.querySelectorAll('.parent-chat-card').forEach(card=>loadParentChat(card,card.dataset.student));
+  },15000);
+}
+
+
+function teacherFollowupEditor(row,rep){const s=rep.support||{};return `<div class="card teacher-followup" id="teacherFollowup"><h3>إدارة متابعة الطالب — للمعلم</h3><p class="muted">هذه اللوحة لا تظهر لولي الأمر بصورتها التحريرية. ما يظهر له هو المحتوى الذي تحفظه بحسب نوعه.</p><label>المستوى<select id="fuLevel"><option value="normal"${s.level==='normal'?' selected':''}>عادي</option><option value="distinguished"${s.level==='distinguished'?' selected':''}>متميز</option><option value="remedial"${s.level==='remedial'?' selected':''}>يحتاج خطة تحسين ومتابعة</option></select></label><label>ملاحظة المعلم لولي الأمر<textarea id="fuTeacherNote" rows="3">${escapeHtml(s.teacherNote||'')}</textarea></label><label>ملاحظة داخلية للمعلم فقط<textarea id="fuPrivateNote" rows="3">${escapeHtml(s.privateNote||'')}</textarea></label><label>هدف الطالب الحالي<textarea id="fuGoal" rows="2">${escapeHtml(s.goal||'')}</textarea></label><label>إشادة للطالب وولي الأمر<textarea id="fuPraise" rows="2">${escapeHtml(s.praise||'')}</textarea></label><label>خطة الإثراء<textarea id="fuEnrichment" rows="4">${escapeHtml(s.enrichmentPlan||'')}</textarea></label><label>مهام خطة الإثراء — مهمة في كل سطر<textarea id="fuEnrichmentTasks" rows="4">${escapeHtml(s.enrichmentTasks||'')}</textarea></label><div id="fuRemedialWrap"><label>خطة التحسين والمتابعة<textarea id="fuRemedial" rows="4">${escapeHtml(s.remedialPlan||'')}</textarea></label><label>مهام خطة التحسين — مهمة في كل سطر<textarea id="fuRemedialTasks" rows="4">${escapeHtml(s.remedialTasks||'')}</textarea></label></div><label class="checkline"><input id="fuContact" type="checkbox"${s.contactNeeded?' checked':''}> يحتاج إلى تواصل مع ولي الأمر</label><div class="teacher-followup-actions"><button type="button" id="saveFollowup">حفظ المتابعة</button><span id="followupSaved" class="save-ok"></span></div></div>`}
+function wireTeacherFollowup(row,rerender){const level=document.getElementById('fuLevel'),wrap=document.getElementById('fuRemedialWrap');if(!level)return;const show=()=>wrap.style.display=level.value==='remedial'?'':'none';level.onchange=show;show();document.getElementById('saveFollowup').onclick=()=>{const val=id=>document.getElementById(id)?.value||'',support={level:level.value,teacherNote:val('fuTeacherNote'),privateNote:val('fuPrivateNote'),goal:val('fuGoal'),praise:val('fuPraise'),enrichmentPlan:val('fuEnrichment'),enrichmentTasks:val('fuEnrichmentTasks'),remedialPlan:val('fuRemedial'),remedialTasks:val('fuRemedialTasks'),contactNeeded:!!document.getElementById('fuContact')?.checked};if(window.opener)window.opener.postMessage({type:'quran-update-support',studentUid:row.id,support},'*');const all=row.report||{};all.support={...(all.support||{}),...support};for(const sm of all.semesters||[])if(sm)sm.support={...(sm.support||{}),...support};sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));document.getElementById('followupSaved').textContent='تم الحفظ';setTimeout(()=>{const x=document.getElementById('followupSaved');if(x)x.textContent=''},1800)}}
+function renderTeacherPreviewRow(row){
+ const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,history=(row.teacherHistory||[]).map(x=>`<div class="history-item"><div>${escapeHtml(x.text||'')}</div><div class="muted">${new Date(x.at).toLocaleString('ar-SA')}</div></div>`).join('');
+ reportsBox.innerHTML=`<section><h2>${escapeHtml(row.full_name||all.name||rep.name||'الطالب')} <button type="button" id="renameStudentBtn">تعديل الاسم</button></h2><p class="muted">الشعبة: ${escapeHtml(rep.section||all.section||'—')}</p><div class="card"><b>تقارير المتابعة</b><p class="muted">التقرير المختصر يعرض أهم المؤشرات، والموسع يعرض السجل اليومي والإحصاءات والتفاصيل والترتيب.</p></div>${renderControls()}<div id="activeReport" class="report-view"><div class="report-view-title"><h3 id="activeReportTitle">${reportMode==='expanded'?'التقرير الموسع':'التقرير المختصر'}</h3><span class="muted">الفصل ${reportSemester===0?'الأول':'الثاني'} — الفترة ${reportPeriod===0?'الأولى':'الثانية'}</span></div>${renderFollowup(rep)}${renderQuran(rep.quran)}${renderCourse('الدراسات الإسلامية','islamic',rep.islamic,rep.courseRanks?.islamic)}${renderCourse('التجويد','tajweed',rep.tajweed,rep.courseRanks?.tajweed)}${renderCourse('المهارات الحياتية','life',rep.life,rep.courseRanks?.life)}${renderTimeline(rep)}</div>${teacherFollowupEditor(row,rep)}<details class="card"><summary>ملاحظات المعلم الداخلية وسجل التغييرات</summary>${rep.support?.privateNote?'<p>'+escapeHtml(rep.support.privateNote)+'</p>':''}${history||'<p class="muted">لا توجد أحداث.</p>'}</details><button type="button" onclick="window.print()">طباعة التقرير</button></section>`;
+ wireReportControls(()=>renderTeacherPreviewRow(row));applyReportMode();
+ const rb=document.getElementById('renameStudentBtn');if(rb)rb.onclick=()=>{const current=row.full_name||all.name||rep.name||'',n=prompt('اسم الطالب:',current);if(n&&n.trim()){row.full_name=n.trim();if(all.name!==undefined)all.name=n.trim();for(const sm of all.semesters||[])if(sm)sm.name=n.trim();sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));if(window.opener)window.opener.postMessage({type:'quran-rename-student',studentUid:row.id,name:n.trim()},'*');renderTeacherPreviewRow(row)}};
+ wireTeacherFollowup(row,()=>renderTeacherPreviewRow(row));
+ if(new URLSearchParams(location.search).get('section')==='followup')setTimeout(()=>document.getElementById('teacherFollowup')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
+}
+function renderTeacherPreview(){
+ const raw=sessionStorage.getItem('quran-student-page-preview');if(!raw)return false;let row;try{row=JSON.parse(raw)}catch(_){return false}
+ __teacherPreviewRow=row;reportSemester=Number(row.activeSemester??reportSemester);authBox.style.display='none';reportsBox.style.display='block';renderTeacherPreviewRow(row);return true
+}
+async function showReports(){
+  authBox.style.display = 'none';
+  reportsBox.style.display = 'block';
+  reportsBox.innerHTML = '<p class="muted">جارٍ التحميل...</p>';
+
+  if(urlCode){
+    const { error } = await supa.rpc('redeem_link_code', { p_code: urlCode });
+    history.replaceState(null, '', location.pathname);
+    if(error){
+      reportsBox.innerHTML = `<section><p class="error">تعذّر ربط الحساب: ${escapeHtml(error.message)}</p></section>`;
+      return;
+    }
+  }
+
+  const { data, error } = await supa.from('students_public').select('*');
+  if(error){
+    reportsBox.innerHTML = `<section><p class="error">تعذّر جلب البيانات: ${error.message}</p></section>`;
+    return;
+  }
+  if(!data.length){
+    reportsBox.innerHTML = '<section><p class="muted">لا يوجد أي طالب مرتبط بحسابك بعد. استخدم رابط/باركود الطالب الذي أعطاك إياه المعلم.</p></section>';
+  } else {
+    reportsBox.innerHTML = data.map(renderStudentCard).join('');
+    wireReportControls(()=>showReports());
+    await wireParentChats();
+    for(const row of data) supa.rpc('mark_report_viewed',{p_student_id:row.id}).catch(()=>{});
+  }
+  const logout = document.createElement('button');
+  logout.textContent = 'تسجيل الخروج';
+  logout.className = 'secondary';
+  logout.onclick = async () => { await supa.auth.signOut(); location.reload(); };
+  reportsBox.appendChild(logout);
+}
+
+function renderAuthForm(mode){
+  authBox.innerHTML = `
+    <section>
+      <div class="tabs">
+        <button id="tabLogin" class="${mode==='login'?'active':''}" type="button">لديّ حساب</button>
+        <button id="tabSignup" class="${mode==='signup'?'active':''}" type="button">حساب جديد</button>
+      </div>
+      ${urlCode ? '<p class="muted">تم رصد رمز طالب في الرابط، سيُربط بحسابك بعد تسجيل الدخول/إنشاء الحساب.</p>' : ''}
+      <input id="paEmail" type="email" placeholder="البريد الإلكتروني">
+      <input id="paPass" type="password" placeholder="كلمة المرور">
+      <button id="paSubmit" type="button">${mode==='login'?'تسجيل الدخول':'إنشاء الحساب'}</button>
+      <p id="paMsg" class="error"></p>
+    </section>`;
+  document.getElementById('tabLogin').onclick = () => renderAuthForm('login');
+  document.getElementById('tabSignup').onclick = () => renderAuthForm('signup');
+  document.getElementById('paSubmit').onclick = async () => {
+    const email = document.getElementById('paEmail').value.trim();
+    const password = document.getElementById('paPass').value;
+    const msg = document.getElementById('paMsg');
+    if(!email || !password){ msg.textContent = 'أدخل البريد وكلمة المرور.'; return; }
+    msg.textContent = 'جارٍ المعالجة...'; msg.classList.remove('error');
+    const fn = mode === 'login' ? supa.auth.signInWithPassword : supa.auth.signUp;
+    const { error } = await fn.call(supa.auth, { email, password });
+    if(error){ msg.textContent = error.message; msg.classList.add('error'); return; }
+    if(mode === 'signup'){
+      msg.textContent = 'إذا طُلب تأكيد البريد، افتح الرابط المُرسَل إليك ثم أعد فتح هذه الصفحة (نفس رابط الباركود إن وُجد).';
+      return;
+    }
+    showReports();
+  };
+}
+
+const teacherPreview = new URLSearchParams(location.search).get('preview')==='1' && renderTeacherPreview();
+if(!teacherPreview) (async () => {
+  if(/^ضع_/.test(SUPABASE_URL) || /^ضع_/.test(SUPABASE_ANON_KEY)){
+    authBox.innerHTML = '<section><p class="error">لم تُعبَّأ إعدادات Supabase في هذا الملف بعد.</p></section>';
+    return;
+  }
+  try{
+    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }catch(err){
+    authBox.innerHTML = '<section><p class="error">تعذّر الاتصال بـ Supabase: ' + err.message + '</p></section>';
+    return;
+  }
+  const { data } = await supa.auth.getSession();
+  if(data.session) showReports(); else renderAuthForm(urlCode ? 'signup' : 'login');
+})();
+</script>
+</body></html>
