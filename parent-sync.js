@@ -112,48 +112,96 @@ function applyMergedIntoApp(mergedVal, mergedMeta) {
 }
 
 // ---------- المزامنة الثنائية الاتجاه بين الأجهزة (المعلم فقط) ----------
-async function syncDevices(statusEl) {
-  statusEl.textContent = 'جارٍ جلب حالة الخادم...';
+// ---------- أداة إنقاذ: فرض رفع بيانات هذا الجهاز بالكامل، متجاوزةً الدمج تمامًا ----------
+// تُستخدم فقط عند التأكد أن بيانات هذا الجهاز صحيحة وأن السحابة تحمل نسخة خاطئة/قديمة.
+async function forceUploadLocal(statusEl) {
+  if (!confirm('سيتم استبدال كل ما في السحابة ببيانات هذا الجهاز فقط، دون أي دمج مع أي جهاز آخر. تأكد أن بيانات هذا الجهاز هي الصحيحة فعلاً. متابعة؟')) return;
+  statusEl.textContent = 'جارٍ التجهيز...';
   const db = window.__app.db;
-  const hadPreviousSnapshot = !!loadJSON(SNAP_KEY, null);
-  // إذا سبق لهذا الجهاز أن دخل دورة المزامنة، سجّل فقط الفروق منذ آخر لقطة.
-  // أما الجهاز الذي يدخل المزامنة لأول مرة فلا نضع على بياناته القديمة طابع «الآن» كي لا يتغلب خطأً على سحابة أحدث.
-  if (hadPreviousSnapshot) trackChange(db);
-  let localMeta = loadJSON(META_KEY, emptyMeta());
-  for (const b of [...BUCKETS, 'students']) if (!localMeta[b]) localMeta[b] = {};
-  const localSnap = snapshotOf(db);
+  const stamp = Date.now();
+  const snap = snapshotOf(db);
+  const forcedMeta = emptyMeta();
+  for (const b of BUCKETS) for (const k of Object.keys(snap[b] || {})) forcedMeta[b][k] = { t: stamp, deleted: false };
+  for (const k of Object.keys(snap.students || {})) forcedMeta.students[k] = { t: stamp, deleted: false };
+  statusEl.textContent = 'جارٍ الرفع القسري...';
+  const { error } = await supa.from('gradebook_state').upsert({ id: 'main', db: snap, meta: forcedMeta, updated_at: new Date().toISOString() });
+  if (error) { statusEl.textContent = 'خطأ في الرفع: ' + error.message; return; }
+  saveJSON(META_KEY, forcedMeta);
+  saveJSON(SNAP_KEY, snap);
+  statusEl.textContent = 'تم فرض رفع بيانات هذا الجهاز بنجاح. زامن بقية الأجهزة الآن لتحديثها.';
+}
 
-  const { data, error } = await supa.from('gradebook_state').select('*').eq('id', 'main').maybeSingle();
-  if (error) { statusEl.textContent = 'خطأ في الجلب: ' + error.message; return; }
-  const remoteSnap = (data && data.db) || {};
-  const remoteMeta = (data && data.meta) || emptyMeta();
-  for (const b of [...BUCKETS, 'students']) if (!remoteMeta[b]) remoteMeta[b] = {};
+async function withTimeout(promise, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([promise,new Promise((_, reject) => {
+      timer=setTimeout(()=>reject(new Error(label+' تجاوز المهلة المحددة. تحقق من الاتصال ثم أعد المحاولة.')),ms);
+    })]);
+  } finally { if(timer) clearTimeout(timer); }
+}
+async function syncDevices(statusEl) {
+  const button=document.getElementById('paSyncDevices');
+  if(button) button.disabled=true;
+  try {
+    statusEl.textContent='جارٍ جلب حالة الخادم...'; saveSyncStatus(statusEl.textContent,'working');
+    const db=window.__app.db;
+    const hadPreviousSnapshot=!!loadJSON(SNAP_KEY,null);
+    if(hadPreviousSnapshot) trackChange(db);
+    let localMeta=loadJSON(META_KEY,emptyMeta());
+    for(const b of [...BUCKETS,'students']) if(!localMeta[b]) localMeta[b]={};
+    const localSnap=snapshotOf(db);
 
-  // أول جهاز يرفع إلى سحابة فارغة هو مصدر البداية الموثوق: نعطي قيمه الحالية طوابع تأسيسية.
-  // بعد ذلك، أي جهاز جديد بلا لقطة سابقة يعامل بياناته القديمة كإرث أقدم من بيانات السحابة ولا يستطيع إحياء نسخة قديمة.
-  const remoteHasData = [...BUCKETS, 'students'].some(b => remoteSnap[b] && Object.keys(remoteSnap[b]).length);
-  if (!hadPreviousSnapshot && !remoteHasData) {
-    const seeded = emptyMeta(), stamp = Date.now();
-    for (const b of BUCKETS) for (const k of Object.keys(localSnap[b] || {})) seeded[b][k] = { t: stamp, deleted: false };
-    for (const k of Object.keys(localSnap.students || {})) seeded.students[k] = { t: stamp, deleted: false };
-    localMeta = seeded;
-    saveJSON(META_KEY, localMeta);
-  }
+    const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'جلب بيانات المزامنة');
+    const {data,error}=fetchResult||{};
+    if(error) throw new Error('خطأ في الجلب: '+error.message);
+    const remoteSnap=(data&&data.db)||{};
+    const remoteMeta=(data&&data.meta)||emptyMeta();
+    for(const b of [...BUCKETS,'students']) if(!remoteMeta[b]) remoteMeta[b]={};
 
-  const mergedVal = {}, mergedMeta = {};
-  for (const b of [...BUCKETS, 'students']) {
-    const r = mergeBucket(localSnap[b], localMeta[b], remoteSnap[b], remoteMeta[b]);
-    mergedVal[b] = r.val; mergedMeta[b] = r.meta;
-  }
+    const remoteHasData=[...BUCKETS,'students'].some(b=>remoteSnap[b]&&Object.keys(remoteSnap[b]).length);
+    if(!hadPreviousSnapshot&&!remoteHasData){
+      const seeded=emptyMeta(),stamp=Date.now();
+      for(const b of BUCKETS) for(const k of Object.keys(localSnap[b]||{})) seeded[b][k]={t:stamp,deleted:false};
+      for(const k of Object.keys(localSnap.students||{})) seeded.students[k]={t:stamp,deleted:false};
+      localMeta=seeded; saveJSON(META_KEY,localMeta);
+    }
 
-  statusEl.textContent = 'جارٍ رفع النتيجة المدمجة...';
-  const { error: upErr } = await supa.from('gradebook_state').upsert({
-    id: 'main', db: mergedVal, meta: mergedMeta, updated_at: new Date().toISOString()
-  });
-  if (upErr) { statusEl.textContent = 'خطأ في الرفع: ' + upErr.message; return; }
+    const mergedVal={},mergedMeta={};
+    for(const b of [...BUCKETS,'students']){
+      const r=mergeBucket(localSnap[b],localMeta[b],remoteSnap[b],remoteMeta[b]);
+      mergedVal[b]=r.val; mergedMeta[b]=r.meta;
+    }
 
-  applyMergedIntoApp(mergedVal, mergedMeta);
-  statusEl.textContent = 'تمت المزامنة بنجاح بين الأجهزة (شملت القرآن والإسلامية والتجويد خانة بخانة).';
+    statusEl.textContent='جارٍ رفع النتيجة المدمجة...'; saveSyncStatus(statusEl.textContent,'working');
+    const upResult=await withTimeout(
+      supa.from('gradebook_state').upsert({id:'main',db:mergedVal,meta:mergedMeta,updated_at:new Date().toISOString()}).select('id,updated_at').maybeSingle(),
+      20000,'رفع بيانات المزامنة'
+    );
+    const {data:savedRow,error:upErr}=upResult||{};
+    if(upErr) throw new Error('خطأ في الرفع: '+upErr.message);
+    if(!savedRow||savedRow.id!=='main') throw new Error('لم يؤكد الخادم حفظ سجل المزامنة.');
+
+    statusEl.textContent='جارٍ التحقق من البيانات المحفوظة...'; saveSyncStatus(statusEl.textContent,'working');
+    const verifyResult=await withTimeout(supa.from('gradebook_state').select('id,updated_at').eq('id','main').maybeSingle(),15000,'التحقق من حفظ المزامنة');
+    const {data:verified,error:verifyErr}=verifyResult||{};
+    if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
+    if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
+
+    const successRec=saveSyncStatus('تمت المزامنة بنجاح بين الأجهزة.','success');
+    statusEl.textContent=successRec.message;
+    applyMergedIntoApp(mergedVal,mergedMeta);
+    setTimeout(async()=>{
+      try{
+        if(document.getElementById('syncDevicesBody')) await renderCloudTab('syncDevices');
+      }catch(_){}
+      const current=document.getElementById('paSyncStatus');
+      if(current) paintSyncStatus(current,successRec);
+    },0);
+  } catch(err) {
+    console.error('Device sync failed:',err);
+    const failRec=saveSyncStatus('تعذرت المزامنة: '+(err&&err.message?err.message:String(err)),'error');
+    statusEl.textContent=failRec.message;
+  } finally { if(button) button.disabled=false; }
 }
 
 // ---------- بناء تقرير طالب واحد لعرضه لولي الأمر ----------
@@ -200,13 +248,53 @@ async function loginBox(root, returnTab) {
     if(error){status.textContent='خطأ: '+error.message;return;} await renderCloudTab(returnTab);
   };
 }
+const SYNC_STATUS_KEY='quran-device-sync-status-v1';
+function saveSyncStatus(message, kind='info'){
+  const rec={message:String(message||''),kind,at:new Date().toISOString()};
+  try{localStorage.setItem(SYNC_STATUS_KEY,JSON.stringify(rec));}catch(_){}
+  return rec;
+}
+function loadSyncStatus(){
+  try{return JSON.parse(localStorage.getItem(SYNC_STATUS_KEY)||'null');}catch(_){return null;}
+}
+function paintSyncStatus(el,rec){
+  if(!el||!rec)return;
+  const when=rec.at?new Date(rec.at).toLocaleString('ar-SA'):'';
+  el.textContent=rec.message+(when?' — '+when:'');
+  el.style.display='inline-block';
+  el.style.marginInlineStart='8px';
+  el.style.fontWeight='700';
+  el.style.border='1px solid #cbd8d2';
+  el.style.background=rec.kind==='success'?'#eef8f2':rec.kind==='error'?'#fff2f2':'#f7f8f7';
+}
 async function renderSyncTab(root) {
-  root.innerHTML=`<div class="summary-card"><b>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</b>
-    <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
-    <button id="paSyncDevices" type="button">مزامنة الأجهزة الآن</button><span id="paSyncStatus" class="muted"></span></div>
-    <button id="paLogout" type="button">تسجيل خروج</button>`;
-  root.querySelector('#paSyncDevices').onclick=()=>syncDevices(root.querySelector('#paSyncStatus'));
-  root.querySelector('#paLogout').onclick=async()=>{await supa.auth.signOut();loginBox(root,'syncDevices');};
+  const last=loadSyncStatus();
+  root.innerHTML=`
+    <div class="card">
+      <h3>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</h3>
+      <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
+        <span id="paSyncStatus" role="status" aria-live="polite"
+          style="display:inline-block;min-height:24px;padding:5px 8px;border-radius:8px"></span>
+      </div>
+      <div id="paSyncLast" class="muted" style="margin-top:8px"></div>
+      <details style="margin-top:14px">
+        <summary>أداة الطوارئ</summary>
+        <p class="muted">لا تستخدمها إلا عند التأكد أن بيانات هذا الجهاز هي النسخة الصحيحة التي تريد استبدال السحابة بها.</p>
+        <button id="paForceUpload" class="btn">فرض رفع بيانات هذا الجهاز</button>
+      </details>
+    </div>`;
+  const syncStatus=root.querySelector('#paSyncStatus');
+  const lastBox=root.querySelector('#paSyncLast');
+  if(last){
+    paintSyncStatus(syncStatus,last);
+    if(last.at) lastBox.textContent='آخر حالة محفوظة: '+new Date(last.at).toLocaleString('ar-SA');
+  }else{
+    syncStatus.textContent='جاهز للمزامنة.';
+  }
+  root.querySelector('#paSyncDevices').onclick=()=>syncDevices(syncStatus);
+  root.querySelector('#paForceUpload').onclick=()=>forceUploadLocal(syncStatus);
 }
 async function renderParentTab(root) {
   const students=uniqueStudents(), semesterOptions=['الأول','الثاني'].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
