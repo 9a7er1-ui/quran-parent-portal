@@ -1,4 +1,4 @@
-const CACHE='quran-pwa-dev-20260930-rosterorder1';
+const CACHE='quran-pwa-dev-20260930-rosterorder2';
 self.addEventListener('install',e=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil((async()=>{
  const keys=await caches.keys();

@@ -115,6 +115,22 @@ function applyMergedIntoApp(mergedVal, mergedMeta) {
     const rec = st.studentUid ? orderMap[st.studentUid] : null;
     if (rec && rec.section === (st.section || (db.sections && db.sections[0]) || '')) st.rosterOrder = rec.order;
   }
+  // مهم: واجهات التطبيق تعتمد أيضًا على ترتيب db.students نفسه، لا على rosterOrder وحده.
+  // لذلك نعيد ترتيب المصفوفة فعليًا بعد الدمج، مع إبقاء نسخ الطالب في مواده متجاورة
+  // وبالترتيب المعتمد نفسه داخل كل شعبة.
+  const subjectRank = { quran: 0, islamic: 1, tajweed: 2, life: 3, lifeskills: 3, 'life-skills': 3 };
+  db.students.sort((a, b) => {
+    const secA = a.section || (db.sections && db.sections[0]) || '';
+    const secB = b.section || (db.sections && db.sections[0]) || '';
+    if (secA !== secB) return String(secA).localeCompare(String(secB), 'ar');
+    const ra = a.studentUid && orderMap[a.studentUid] && orderMap[a.studentUid].section === secA ? Number(orderMap[a.studentUid].order) : Number(a.rosterOrder);
+    const rb = b.studentUid && orderMap[b.studentUid] && orderMap[b.studentUid].section === secB ? Number(orderMap[b.studentUid].order) : Number(b.rosterOrder);
+    const oa = Number.isFinite(ra) ? ra : 999999;
+    const ob = Number.isFinite(rb) ? rb : 999999;
+    if (oa !== ob) return oa - ob;
+    if ((a.studentUid || '') !== (b.studentUid || '')) return String(a.name || '').localeCompare(String(b.name || ''), 'ar');
+    return (subjectRank[a.subject || 'quran'] ?? 99) - (subjectRank[b.subject || 'quran'] ?? 99);
+  });
   app.save();
   saveJSON(META_KEY, mergedMeta);
   saveJSON(SNAP_KEY, snapshotOf(db));
@@ -279,14 +295,28 @@ function paintSyncStatus(el,rec){
 }
 async function adoptThisDeviceRosterOrder(statusEl){
   try{
-    const snap=snapshotOf(window.__app.db);
+    const app=window.__app, counters={};
+    // نعتمد ترتيب القائمة الظاهر فعليًا في هذا الجهاز، لا قيمة قديمة محفوظة في rosterOrder.
+    for(const st of app.db.students){
+      if((st.subject || 'quran') !== 'quran' || !st.studentUid) continue;
+      const sec=st.section || (app.db.sections && app.db.sections[0]) || '';
+      const n=counters[sec] || 0;
+      st.rosterOrder=n;
+      counters[sec]=n+1;
+      // نفس ترتيب الطالب لجميع نسخه في المواد.
+      for(const copy of app.db.students){
+        if(copy.studentUid===st.studentUid && (copy.section || (app.db.sections && app.db.sections[0]) || '')===sec) copy.rosterOrder=n;
+      }
+    }
+    const snap=snapshotOf(app.db);
     const meta=loadJSON(META_KEY,emptyMeta());
     if(!meta.rosterOrder) meta.rosterOrder={};
     const stamp=Date.now();
     for(const uid of Object.keys(snap.rosterOrder||{})) meta.rosterOrder[uid]={t:stamp,deleted:false};
     saveJSON(META_KEY,meta);
     saveJSON(SNAP_KEY,snap);
-    const rec=saveSyncStatus('تم اعتماد ترتيب الطلاب في هذا الجهاز. جارٍ رفعه للسحابة...','working');
+    app.save();
+    const rec=saveSyncStatus('تم اعتماد ترتيب الطلاب الظاهر في هذا الجهاز. جارٍ رفعه للسحابة...','working');
     statusEl.textContent=rec.message;
     await syncDevices(statusEl);
   }catch(err){
