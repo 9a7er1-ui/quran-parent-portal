@@ -295,18 +295,21 @@ function paintSyncStatus(el,rec){
 }
 async function adoptThisDeviceRosterOrder(statusEl){
   try{
-    const app=window.__app, counters={};
-    // نعتمد ترتيب القائمة الظاهر فعليًا في هذا الجهاز، لا قيمة قديمة محفوظة في rosterOrder.
-    for(const st of app.db.students){
-      if((st.subject || 'quran') !== 'quran' || !st.studentUid) continue;
-      const sec=st.section || (app.db.sections && app.db.sections[0]) || '';
-      const n=counters[sec] || 0;
-      st.rosterOrder=n;
-      counters[sec]=n+1;
-      // نفس ترتيب الطالب لجميع نسخه في المواد.
-      for(const copy of app.db.students){
-        if(copy.studentUid===st.studentUid && (copy.section || (app.db.sections && app.db.sections[0]) || '')===sec) copy.rosterOrder=n;
-      }
+    const app=window.__app;
+    const sections=app.db.sections || [];
+    for(const sec of sections){
+      const masters=app.db.students
+        .filter(st=>(st.subject || 'quran')==='quran' && (st.section || sections[0] || '')===sec)
+        .sort((a,b)=>{
+          const ao=Number(a.rosterOrder),bo=Number(b.rosterOrder);
+          const av=Number.isFinite(ao)?ao:999999,bv=Number.isFinite(bo)?bo:999999;
+          return av-bv;
+        });
+      masters.forEach((st,n)=>{
+        for(const copy of app.db.students){
+          if(copy.studentUid===st.studentUid && (copy.section || sections[0] || '')===sec) copy.rosterOrder=n;
+        }
+      });
     }
     const snap=snapshotOf(app.db);
     const meta=loadJSON(META_KEY,emptyMeta());
