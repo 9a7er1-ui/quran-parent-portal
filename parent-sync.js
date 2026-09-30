@@ -60,7 +60,7 @@ function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
       else if (remoteVal && k in remoteVal) outVal[k] = remoteVal[k];
       continue;
     }
-    const localWins = tL >= tR, winnerMeta = localWins ? mL : mR, winnerVal = localWins ? localVal : remoteVal;
+    const localWins = tL > tR, winnerMeta = localWins ? mL : mR, winnerVal = localWins ? localVal : remoteVal;
     outMeta[k] = winnerMeta;
     if (!winnerMeta.deleted && winnerVal && (k in winnerVal)) outVal[k] = winnerVal[k];
   }
@@ -164,22 +164,76 @@ async function pullRemoteToThisDevice(statusEl) {
   if(button) button.disabled=true;
   try {
     statusEl.textContent='جارٍ تنزيل نسخة السحابة...'; saveSyncStatus(statusEl.textContent,'working');
-    const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'تنزيل نسخة السحابة');
+    const fetchResult=await withTimeout(
+      supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),
+      20000,'تنزيل نسخة السحابة'
+    );
     const {data,error}=fetchResult||{};
     if(error) throw new Error('خطأ في الجلب: '+error.message);
     if(!data||!data.db) throw new Error('لم توجد نسخة سحابية صالحة للاستعادة.');
+
     const remoteSnap=data.db||{};
     const remoteMeta=data.meta||emptyMeta();
-    applyMergedIntoApp(remoteSnap,remoteMeta);
-    const rec=saveSyncStatus('تم تنزيل نسخة السحابة إلى هذا الجهاز دون رفع بيانات محلية.','success');
+    const app=window.__app;
+    if(!app||!app.db) throw new Error('تعذر الوصول إلى قاعدة بيانات التطبيق المحلية.');
+
+    // نبني نسخة كاملة من قاعدة التطبيق، مع إبقاء إعدادات العرض المحلية
+    // (الفصل/المادة/الأسبوع الحالي...) ثم نستبدل فقط البيانات المتزامنة.
+    const restored=JSON.parse(JSON.stringify(app.db));
+
+    for(const b of BUCKETS) {
+      if(b!=='rosterOrder') restored[b]=JSON.parse(JSON.stringify(remoteSnap[b]||{}));
+    }
+    restored.students=Object.values(remoteSnap.students||{}).map(x=>JSON.parse(JSON.stringify(x)));
+
+    // تطبيق ترتيب الطلاب المعتمد في السحابة على جميع نسخ الطالب في المواد.
+    const orderMap=remoteSnap.rosterOrder||{};
+    for(const st of restored.students){
+      const rec=st.studentUid ? orderMap[st.studentUid] : null;
+      if(rec && rec.section===(st.section||(restored.sections&&restored.sections[0])||'')){
+        st.rosterOrder=rec.order;
+      }
+    }
+
+    const subjectRank={quran:0,islamic:1,tajweed:2,life:3,lifeskills:3,'life-skills':3};
+    restored.students.sort((a,b)=>{
+      const secA=a.section||(restored.sections&&restored.sections[0])||'';
+      const secB=b.section||(restored.sections&&restored.sections[0])||'';
+      if(secA!==secB) return String(secA).localeCompare(String(secB),'ar');
+      const ra=a.studentUid&&orderMap[a.studentUid]&&orderMap[a.studentUid].section===secA ? Number(orderMap[a.studentUid].order) : Number(a.rosterOrder);
+      const rb=b.studentUid&&orderMap[b.studentUid]&&orderMap[b.studentUid].section===secB ? Number(orderMap[b.studentUid].order) : Number(b.rosterOrder);
+      const oa=Number.isFinite(ra)?ra:999999, ob=Number.isFinite(rb)?rb:999999;
+      if(oa!==ob) return oa-ob;
+      if((a.studentUid||'')!==(b.studentUid||'')) return String(a.name||'').localeCompare(String(b.name||''),'ar');
+      return (subjectRank[a.subject||'quran']??99)-(subjectRank[b.subject||'quran']??99);
+    });
+
+    // الأهم: نكتب مباشرة في المفتاح الذي يقرأه index.html عند التشغيل،
+    // بدل الاعتماد على تبديل الكائن الحي فقط.
+    localStorage.setItem('quran-offline-v1',JSON.stringify(restored));
+    saveJSON(META_KEY,remoteMeta);
+
+    // نبني لقطة مطابقة لما كتبناه فعلًا.
+    const snapForMeta={
+      grades:restored.grades||{}, absences:restored.absences||{}, tests:restored.tests||{},
+      approvals:restored.approvals||{}, holidays:restored.holidays||{}, coursework:restored.coursework||{},
+      studentSupport:restored.studentSupport||{}, rosterOrder:remoteSnap.rosterOrder||{},
+      students:Object.fromEntries((restored.students||[]).map(s=>[s.id,s]))
+    };
+    saveJSON(SNAP_KEY,snapForMeta);
+
+    const rec=saveSyncStatus('تم تنزيل نسخة السحابة وحفظها على هذا الجهاز. ستُعاد الصفحة الآن.','success');
     statusEl.textContent=rec.message;
+
+    // إعادة التحميل تضمن أن index.html يعيد قراءة النسخة الجديدة من localStorage.
+    setTimeout(()=>location.reload(),500);
   } catch(err) {
     console.error('Remote pull failed:',err);
     const rec=saveSyncStatus('تعذر تنزيل نسخة السحابة: '+(err&&err.message?err.message:String(err)),'error');
     statusEl.textContent=rec.message;
-  } finally { if(button) button.disabled=false; }
+    if(button) button.disabled=false;
+  }
 }
-
 async function withTimeout(promise, ms, label) {
   let timer;
   try {
