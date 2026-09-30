@@ -9,7 +9,7 @@ const LINK_CODE_VALID_HOURS = 72; // مدة صلاحية رمز الربط قب�
 
 const META_KEY = 'quran-sync-meta-v1';   // طوابع زمنية لكل خانة (محلي فقط)
 const SNAP_KEY = 'quran-sync-prevsnap-v1'; // آخر نسخة قورنت بها التغييرات (محلي فقط)
-const BUCKETS = ['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework', 'studentSupport'];
+const BUCKETS = ['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework', 'studentSupport', 'rosterOrder'];
 
 let supa = null;
 
@@ -68,14 +68,19 @@ function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
 }
 
 // ---------- تتبع تغييرات db محليًا بعد كل save() ----------
-function emptyMeta() { return { grades: {}, absences: {}, tests: {}, approvals: {}, holidays: {}, coursework: {}, studentSupport: {}, students: {} }; }
+function emptyMeta() { return { grades: {}, absences: {}, tests: {}, approvals: {}, holidays: {}, coursework: {}, studentSupport: {}, rosterOrder: {}, students: {} }; }
 function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {} }
 
 function snapshotOf(db) {
-  const studentsById = {};
-  for (const s of db.students) studentsById[s.id] = s;
-  return { grades: db.grades, absences: db.absences, tests: db.tests, approvals: db.approvals, holidays: db.holidays, coursework: db.coursework, studentSupport: db.studentSupport || {}, students: studentsById };
+  const studentsById = {}, rosterOrder = {};
+  for (const s of db.students) {
+    studentsById[s.id] = s;
+    if (s.studentUid && (s.subject || 'quran') === 'quran') {
+      rosterOrder[s.studentUid] = { section: s.section || (db.sections && db.sections[0]) || '', order: Number.isFinite(Number(s.rosterOrder)) ? Number(s.rosterOrder) : 999999 };
+    }
+  }
+  return { grades: db.grades, absences: db.absences, tests: db.tests, approvals: db.approvals, holidays: db.holidays, coursework: db.coursework, studentSupport: db.studentSupport || {}, rosterOrder, students: studentsById };
 }
 
 function trackChange(db) {
@@ -102,9 +107,14 @@ window.__onSave = trackChange;
 // ---------- تطبيق ناتج الدمج مرة أخرى داخل db الحيّة وإعادة الرسم ----------
 function applyMergedIntoApp(mergedVal, mergedMeta) {
   const app = window.__app, db = app.db;
-  for (const b of BUCKETS) db[b] = mergedVal[b] || {};
+  for (const b of BUCKETS) if (b !== 'rosterOrder') db[b] = mergedVal[b] || {};
   const studentsArr = Object.values(mergedVal.students || {});
   db.students = studentsArr;
+  const orderMap = mergedVal.rosterOrder || {};
+  for (const st of db.students) {
+    const rec = st.studentUid ? orderMap[st.studentUid] : null;
+    if (rec && rec.section === (st.section || (db.sections && db.sections[0]) || '')) st.rosterOrder = rec.order;
+  }
   app.save();
   saveJSON(META_KEY, mergedMeta);
   saveJSON(SNAP_KEY, snapshotOf(db));
@@ -267,6 +277,23 @@ function paintSyncStatus(el,rec){
   el.style.border='1px solid #cbd8d2';
   el.style.background=rec.kind==='success'?'#eef8f2':rec.kind==='error'?'#fff2f2':'#f7f8f7';
 }
+async function adoptThisDeviceRosterOrder(statusEl){
+  try{
+    const snap=snapshotOf(window.__app.db);
+    const meta=loadJSON(META_KEY,emptyMeta());
+    if(!meta.rosterOrder) meta.rosterOrder={};
+    const stamp=Date.now();
+    for(const uid of Object.keys(snap.rosterOrder||{})) meta.rosterOrder[uid]={t:stamp,deleted:false};
+    saveJSON(META_KEY,meta);
+    saveJSON(SNAP_KEY,snap);
+    const rec=saveSyncStatus('تم اعتماد ترتيب الطلاب في هذا الجهاز. جارٍ رفعه للسحابة...','working');
+    statusEl.textContent=rec.message;
+    await syncDevices(statusEl);
+  }catch(err){
+    const rec=saveSyncStatus('تعذر اعتماد ترتيب هذا الجهاز: '+(err&&err.message?err.message:String(err)),'error');
+    statusEl.textContent=rec.message;
+  }
+}
 async function renderSyncTab(root) {
   const last=loadSyncStatus();
   root.innerHTML=`
@@ -275,6 +302,7 @@ async function renderSyncTab(root) {
       <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
+        <button id="paAdoptRosterOrder" class="btn">اعتماد ترتيب هذا الجهاز</button>
         <span id="paSyncStatus" role="status" aria-live="polite"
           style="display:inline-block;min-height:24px;padding:5px 8px;border-radius:8px"></span>
       </div>
@@ -294,6 +322,7 @@ async function renderSyncTab(root) {
     syncStatus.textContent='جاهز للمزامنة.';
   }
   root.querySelector('#paSyncDevices').onclick=()=>syncDevices(syncStatus);
+  root.querySelector('#paAdoptRosterOrder').onclick=()=>adoptThisDeviceRosterOrder(syncStatus);
   root.querySelector('#paForceUpload').onclick=()=>forceUploadLocal(syncStatus);
 }
 async function renderParentTab(root) {
