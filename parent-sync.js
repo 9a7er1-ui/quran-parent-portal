@@ -172,7 +172,11 @@ async function syncDevices(statusEl) {
     statusEl.textContent='جارٍ جلب حالة الخادم...'; saveSyncStatus(statusEl.textContent,'working');
     const db=window.__app.db;
     const hadPreviousSnapshot=!!loadJSON(SNAP_KEY,null);
-    if(hadPreviousSnapshot) trackChange(db);
+
+    // مهم جدًا: لا نستدعِ trackChange() هنا.
+    // التغييرات الحقيقية تُسجَّل وقت app.save() عبر window.__onSave.
+    // استدعاء trackChange عند بدء المزامنة كان يجعل جهازًا قديمًا يمنح بياناته
+    // طابعًا زمنيًا جديدًا، فتفوز خطأً على نسخة السحابة الأحدث.
     let localMeta=loadJSON(META_KEY,emptyMeta());
     for(const b of [...BUCKETS,'students']) if(!localMeta[b]) localMeta[b]={};
     const localSnap=snapshotOf(db);
@@ -183,32 +187,6 @@ async function syncDevices(statusEl) {
     const remoteSnap=(data&&data.db)||{};
     const remoteMeta=(data&&data.meta)||emptyMeta();
     for(const b of [...BUCKETS,'students']) if(!remoteMeta[b]) remoteMeta[b]={};
-
-    // مزامنة آمنة بين أجهزة قد تختلف ساعاتها:
-    // إذا كان هذا الجهاز يحمل تغييرًا محليًا مسجلًا يختلف عن السحابة،
-    // نجعل طابعه أحدث من أعلى طابع موجود في السحابة بدل الاعتماد على ساعة الجهاز وحدها.
-    let remoteMaxT=0;
-    for(const b of [...BUCKETS,'students']){
-      for(const m of Object.values(remoteMeta[b]||{})){
-        const t=Number(m&&m.t);
-        if(Number.isFinite(t)&&t>remoteMaxT) remoteMaxT=t;
-      }
-    }
-    let logicalT=Math.max(Date.now(),remoteMaxT+1);
-    for(const b of [...BUCKETS,'students']){
-      const lv=localSnap[b]||{}, rv=remoteSnap[b]||{}, lm=localMeta[b]||{};
-      for(const k of Object.keys(lm)){
-        const m=lm[k];
-        if(!m) continue;
-        const localExists=Object.prototype.hasOwnProperty.call(lv,k);
-        const remoteExists=Object.prototype.hasOwnProperty.call(rv,k);
-        const differs=localExists!==remoteExists || (localExists&&JSON.stringify(lv[k])!==JSON.stringify(rv[k]));
-        if(differs && Number(m.t)<=remoteMaxT){
-          lm[k]={...m,t:logicalT++};
-        }
-      }
-    }
-    saveJSON(META_KEY,localMeta);
 
     const remoteHasData=[...BUCKETS,'students'].some(b=>remoteSnap[b]&&Object.keys(remoteSnap[b]).length);
     if(!hadPreviousSnapshot&&!remoteHasData){
@@ -234,16 +212,15 @@ async function syncDevices(statusEl) {
     if(!savedRow||savedRow.id!=='main') throw new Error('لم يؤكد الخادم حفظ سجل المزامنة.');
 
     statusEl.textContent='جارٍ التحقق من البيانات المحفوظة...'; saveSyncStatus(statusEl.textContent,'working');
-    const verifyResult=await withTimeout(supa.from('gradebook_state').select('id,updated_at,db,meta').eq('id','main').maybeSingle(),15000,'التحقق من حفظ المزامنة');
+    const verifyResult=await withTimeout(supa.from('gradebook_state').select('id,updated_at').eq('id','main').maybeSingle(),15000,'التحقق من حفظ المزامنة');
     const {data:verified,error:verifyErr}=verifyResult||{};
     if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
     if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
-    if(JSON.stringify((verified.db&&verified.db.grades)||{})!==JSON.stringify(mergedVal.grades||{}))
-      throw new Error('الخادم لم يُرجع درجات مطابقة للنتيجة المدمجة؛ أُوقفت المزامنة لحماية البيانات.');
 
+    // نطبّق الدمج أولًا؛ applyMergedIntoApp يحفظ snapshot/meta المطابقين للناتج.
+    applyMergedIntoApp(mergedVal,mergedMeta);
     const successRec=saveSyncStatus('تمت المزامنة بنجاح بين الأجهزة.','success');
     statusEl.textContent=successRec.message;
-    applyMergedIntoApp(mergedVal,mergedMeta);
     setTimeout(async()=>{
       try{
         if(document.getElementById('syncDevicesBody')) await renderCloudTab('syncDevices');
@@ -323,21 +300,18 @@ function paintSyncStatus(el,rec){
 }
 async function adoptThisDeviceRosterOrder(statusEl){
   try{
-    const app=window.__app;
-    const sections=app.db.sections || [];
-    for(const sec of sections){
-      const masters=app.db.students
-        .filter(st=>(st.subject || 'quran')==='quran' && (st.section || sections[0] || '')===sec)
-        .sort((a,b)=>{
-          const ao=Number(a.rosterOrder),bo=Number(b.rosterOrder);
-          const av=Number.isFinite(ao)?ao:999999,bv=Number.isFinite(bo)?bo:999999;
-          return av-bv;
-        });
-      masters.forEach((st,n)=>{
-        for(const copy of app.db.students){
-          if(copy.studentUid===st.studentUid && (copy.section || sections[0] || '')===sec) copy.rosterOrder=n;
-        }
-      });
+    const app=window.__app, counters={};
+    // نعتمد ترتيب القائمة الظاهر فعليًا في هذا الجهاز، لا قيمة قديمة محفوظة في rosterOrder.
+    for(const st of app.db.students){
+      if((st.subject || 'quran') !== 'quran' || !st.studentUid) continue;
+      const sec=st.section || (app.db.sections && app.db.sections[0]) || '';
+      const n=counters[sec] || 0;
+      st.rosterOrder=n;
+      counters[sec]=n+1;
+      // نفس ترتيب الطالب لجميع نسخه في المواد.
+      for(const copy of app.db.students){
+        if(copy.studentUid===st.studentUid && (copy.section || (app.db.sections && app.db.sections[0]) || '')===sec) copy.rosterOrder=n;
+      }
     }
     const snap=snapshotOf(app.db);
     const meta=loadJSON(META_KEY,emptyMeta());
