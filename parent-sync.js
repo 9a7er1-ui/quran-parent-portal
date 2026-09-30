@@ -157,6 +157,29 @@ async function forceUploadLocal(statusEl) {
   statusEl.textContent = 'تم فرض رفع بيانات هذا الجهاز بنجاح. زامن بقية الأجهزة الآن لتحديثها.';
 }
 
+// ---------- استعادة آمنة: تنزيل نسخة السحابة إلى هذا الجهاز فقط دون رفع أي شيء ----------
+async function pullRemoteToThisDevice(statusEl) {
+  if (!confirm('سيتم استبدال بيانات هذا الجهاز بنسخة السحابة الحالية فقط، ولن يُرفع شيء من هذا الجهاز. متابعة؟')) return;
+  const button=document.getElementById('paPullRemote');
+  if(button) button.disabled=true;
+  try {
+    statusEl.textContent='جارٍ تنزيل نسخة السحابة...'; saveSyncStatus(statusEl.textContent,'working');
+    const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'تنزيل نسخة السحابة');
+    const {data,error}=fetchResult||{};
+    if(error) throw new Error('خطأ في الجلب: '+error.message);
+    if(!data||!data.db) throw new Error('لم توجد نسخة سحابية صالحة للاستعادة.');
+    const remoteSnap=data.db||{};
+    const remoteMeta=data.meta||emptyMeta();
+    applyMergedIntoApp(remoteSnap,remoteMeta);
+    const rec=saveSyncStatus('تم تنزيل نسخة السحابة إلى هذا الجهاز دون رفع بيانات محلية.','success');
+    statusEl.textContent=rec.message;
+  } catch(err) {
+    console.error('Remote pull failed:',err);
+    const rec=saveSyncStatus('تعذر تنزيل نسخة السحابة: '+(err&&err.message?err.message:String(err)),'error');
+    statusEl.textContent=rec.message;
+  } finally { if(button) button.disabled=false; }
+}
+
 async function withTimeout(promise, ms, label) {
   let timer;
   try {
@@ -172,11 +195,8 @@ async function syncDevices(statusEl) {
     statusEl.textContent='جارٍ جلب حالة الخادم...'; saveSyncStatus(statusEl.textContent,'working');
     const db=window.__app.db;
     const hadPreviousSnapshot=!!loadJSON(SNAP_KEY,null);
-
-    // مهم جدًا: لا نستدعِ trackChange() هنا.
-    // التغييرات الحقيقية تُسجَّل وقت app.save() عبر window.__onSave.
-    // استدعاء trackChange عند بدء المزامنة كان يجعل جهازًا قديمًا يمنح بياناته
-    // طابعًا زمنيًا جديدًا، فتفوز خطأً على نسخة السحابة الأحدث.
+    // مهم: لا نستدعِ trackChange هنا. التغييرات الحقيقية تُسجَّل لحظة الحفظ عبر window.__onSave.
+    // استدعاؤها عند بدء المزامنة قد يمنح بيانات جهاز قديمة طابعًا زمنيًا جديدًا فتتغلب خطأً على السحابة.
     let localMeta=loadJSON(META_KEY,emptyMeta());
     for(const b of [...BUCKETS,'students']) if(!localMeta[b]) localMeta[b]={};
     const localSnap=snapshotOf(db);
@@ -217,10 +237,9 @@ async function syncDevices(statusEl) {
     if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
     if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
 
-    // نطبّق الدمج أولًا؛ applyMergedIntoApp يحفظ snapshot/meta المطابقين للناتج.
-    applyMergedIntoApp(mergedVal,mergedMeta);
     const successRec=saveSyncStatus('تمت المزامنة بنجاح بين الأجهزة.','success');
     statusEl.textContent=successRec.message;
+    applyMergedIntoApp(mergedVal,mergedMeta);
     setTimeout(async()=>{
       try{
         if(document.getElementById('syncDevicesBody')) await renderCloudTab('syncDevices');
@@ -344,7 +363,8 @@ async function renderSyncTab(root) {
       <div id="paSyncLast" class="muted" style="margin-top:8px"></div>
       <details style="margin-top:14px">
         <summary>أداة الطوارئ</summary>
-        <p class="muted">لا تستخدمها إلا عند التأكد أن بيانات هذا الجهاز هي النسخة الصحيحة التي تريد استبدال السحابة بها.</p>
+        <p class="muted">أدوات الاستعادة عند وجود جهاز قديم أو نسخة سحابية تحتاج إلى استبدال.</p>
+        <button id="paPullRemote" class="btn">تنزيل نسخة السحابة إلى هذا الجهاز</button>
         <button id="paForceUpload" class="btn">فرض رفع بيانات هذا الجهاز</button>
       </details>
     </div>`;
@@ -358,6 +378,7 @@ async function renderSyncTab(root) {
   }
   root.querySelector('#paSyncDevices').onclick=()=>syncDevices(syncStatus);
   root.querySelector('#paAdoptRosterOrder').onclick=()=>adoptThisDeviceRosterOrder(syncStatus);
+  root.querySelector('#paPullRemote').onclick=()=>pullRemoteToThisDevice(syncStatus);
   root.querySelector('#paForceUpload').onclick=()=>forceUploadLocal(syncStatus);
 }
 async function renderParentTab(root) {
