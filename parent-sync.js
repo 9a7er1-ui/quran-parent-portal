@@ -184,6 +184,32 @@ async function syncDevices(statusEl) {
     const remoteMeta=(data&&data.meta)||emptyMeta();
     for(const b of [...BUCKETS,'students']) if(!remoteMeta[b]) remoteMeta[b]={};
 
+    // مزامنة آمنة بين أجهزة قد تختلف ساعاتها:
+    // إذا كان هذا الجهاز يحمل تغييرًا محليًا مسجلًا يختلف عن السحابة،
+    // نجعل طابعه أحدث من أعلى طابع موجود في السحابة بدل الاعتماد على ساعة الجهاز وحدها.
+    let remoteMaxT=0;
+    for(const b of [...BUCKETS,'students']){
+      for(const m of Object.values(remoteMeta[b]||{})){
+        const t=Number(m&&m.t);
+        if(Number.isFinite(t)&&t>remoteMaxT) remoteMaxT=t;
+      }
+    }
+    let logicalT=Math.max(Date.now(),remoteMaxT+1);
+    for(const b of [...BUCKETS,'students']){
+      const lv=localSnap[b]||{}, rv=remoteSnap[b]||{}, lm=localMeta[b]||{};
+      for(const k of Object.keys(lm)){
+        const m=lm[k];
+        if(!m) continue;
+        const localExists=Object.prototype.hasOwnProperty.call(lv,k);
+        const remoteExists=Object.prototype.hasOwnProperty.call(rv,k);
+        const differs=localExists!==remoteExists || (localExists&&JSON.stringify(lv[k])!==JSON.stringify(rv[k]));
+        if(differs && Number(m.t)<=remoteMaxT){
+          lm[k]={...m,t:logicalT++};
+        }
+      }
+    }
+    saveJSON(META_KEY,localMeta);
+
     const remoteHasData=[...BUCKETS,'students'].some(b=>remoteSnap[b]&&Object.keys(remoteSnap[b]).length);
     if(!hadPreviousSnapshot&&!remoteHasData){
       const seeded=emptyMeta(),stamp=Date.now();
@@ -208,10 +234,12 @@ async function syncDevices(statusEl) {
     if(!savedRow||savedRow.id!=='main') throw new Error('لم يؤكد الخادم حفظ سجل المزامنة.');
 
     statusEl.textContent='جارٍ التحقق من البيانات المحفوظة...'; saveSyncStatus(statusEl.textContent,'working');
-    const verifyResult=await withTimeout(supa.from('gradebook_state').select('id,updated_at').eq('id','main').maybeSingle(),15000,'التحقق من حفظ المزامنة');
+    const verifyResult=await withTimeout(supa.from('gradebook_state').select('id,updated_at,db,meta').eq('id','main').maybeSingle(),15000,'التحقق من حفظ المزامنة');
     const {data:verified,error:verifyErr}=verifyResult||{};
     if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
     if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
+    if(JSON.stringify((verified.db&&verified.db.grades)||{})!==JSON.stringify(mergedVal.grades||{}))
+      throw new Error('الخادم لم يُرجع درجات مطابقة للنتيجة المدمجة؛ أُوقفت المزامنة لحماية البيانات.');
 
     const successRec=saveSyncStatus('تمت المزامنة بنجاح بين الأجهزة.','success');
     statusEl.textContent=successRec.message;
