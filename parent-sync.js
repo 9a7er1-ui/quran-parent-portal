@@ -67,6 +67,63 @@ function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
   return { val: outVal, meta: outMeta };
 }
 
+
+// ---------- توحيد مفاتيح المزامنة عبر studentUid ----------
+// قد يكون للطالب id محلي مختلف في اللابتوب والآيباد، بينما studentUid واحد.
+// لذلك نحوّل مفاتيح السجلات إلى مفتاح منطقي مبني على studentUid قبل الدمج،
+// ثم نعيدها إلى id المحلي بعد الدمج حتى تبقى واجهة التطبيق كما هي.
+function buildStudentMaps(localStudents, remoteStudents) {
+  const localIdToUid={}, remoteIdToUid={}, uidToLocalId={};
+  for(const s of Object.values(localStudents||{})){
+    if(s?.id && s?.studentUid){ localIdToUid[s.id]=s.studentUid; if(!uidToLocalId[s.studentUid]) uidToLocalId[s.studentUid]=s.id; }
+  }
+  for(const s of Object.values(remoteStudents||{})){
+    if(s?.id && s?.studentUid) remoteIdToUid[s.id]=s.studentUid;
+  }
+  return {localIdToUid,remoteIdToUid,uidToLocalId};
+}
+function canonicalStudentKey(id, idToUid){ return idToUid[id] ? 'uid:'+idToUid[id] : 'id:'+id; }
+function canonicalizeKeys(obj, idToUid){
+  const out={};
+  for(const [k,v] of Object.entries(obj||{})){
+    const parts=String(k).split('|');
+    for(let i=0;i<parts.length;i++) if(idToUid[parts[i]]) parts[i]='uid:'+idToUid[parts[i]];
+    out[parts.join('|')]=v;
+  }
+  return out;
+}
+function canonicalizeMeta(meta, idToUid){ return canonicalizeKeys(meta||{},idToUid); }
+function decanonicalizeKeys(obj, uidToLocalId){
+  const out={};
+  for(const [k,v] of Object.entries(obj||{})){
+    const parts=String(k).split('|');
+    for(let i=0;i<parts.length;i++) if(parts[i].startsWith('uid:')){ const uid=parts[i].slice(4); if(uidToLocalId[uid]) parts[i]=uidToLocalId[uid]; }
+    out[parts.join('|')]=v;
+  }
+  return out;
+}
+function decanonicalizeMeta(meta, uidToLocalId){ return decanonicalizeKeys(meta||{},uidToLocalId); }
+function canonicalizeStudents(students, idToUid){
+  const out={};
+  for(const [id,s] of Object.entries(students||{})){ out[canonicalStudentKey(id,idToUid)]=s; }
+  return out;
+}
+function mergeCanonicalSnapshots(localSnap,localMeta,remoteSnap,remoteMeta){
+  const maps=buildStudentMaps(localSnap.students,remoteSnap.students);
+  const lS=canonicalizeStudents(localSnap.students,maps.localIdToUid);
+  const rS=canonicalizeStudents(remoteSnap.students,maps.remoteIdToUid);
+  const lM=canonicalizeMeta(localMeta.students,maps.localIdToUid);
+  const rM=canonicalizeMeta(remoteMeta.students,maps.remoteIdToUid);
+  const sm=mergeBucket(lS,lM,rS,rM);
+  const mergedVal={students:sm.val}, mergedMeta={students:sm.meta};
+  for(const b of BUCKETS){
+    const lv=canonicalizeKeys(localSnap[b],maps.localIdToUid), rv=canonicalizeKeys(remoteSnap[b],maps.remoteIdToUid);
+    const lm=canonicalizeMeta(localMeta[b],maps.localIdToUid), rm=canonicalizeMeta(remoteMeta[b],maps.remoteIdToUid);
+    const m=mergeBucket(lv,lm,rv,rm); mergedVal[b]=m.val; mergedMeta[b]=m.meta;
+  }
+  return {mergedVal,mergedMeta,maps};
+}
+
 // ---------- تتبع تغييرات db محليًا بعد كل save() ----------
 function emptyMeta() { return { grades: {}, absences: {}, tests: {}, approvals: {}, holidays: {}, coursework: {}, studentSupport: {}, rosterOrder: {}, students: {} }; }
 function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } }
@@ -106,34 +163,47 @@ window.__onSave = trackChange;
 
 // ---------- تطبيق ناتج الدمج مرة أخرى داخل db الحيّة وإعادة الرسم ----------
 function applyMergedIntoApp(mergedVal, mergedMeta) {
-  const app = window.__app, db = app.db;
-  for (const b of BUCKETS) if (b !== 'rosterOrder') db[b] = mergedVal[b] || {};
-  const studentsArr = Object.values(mergedVal.students || {});
-  db.students = studentsArr;
-  const orderMap = mergedVal.rosterOrder || {};
-  for (const st of db.students) {
-    const rec = st.studentUid ? orderMap[st.studentUid] : null;
-    if (rec && rec.section === (st.section || (db.sections && db.sections[0]) || '')) st.rosterOrder = rec.order;
+  const app=window.__app, db=app.db;
+  const currentStudents=Object.values(db.students||{});
+  const uidToLocalId={};
+  for(const s of currentStudents) if(s.studentUid&&s.id) uidToLocalId[s.studentUid]=s.id;
+  // إذا كان الطالب جديدًا على هذا الجهاز، نحتفظ بمعرّف السحابة.
+  const studentObj={};
+  for(const [ck,s] of Object.entries(mergedVal.students||{})){
+    const x={...s};
+    if(ck.startsWith('uid:')){ const uid=ck.slice(4); if(uidToLocalId[uid]) x.id=uidToLocalId[uid]; }
+    studentObj[x.id]=x;
+    if(x.studentUid&&x.id) uidToLocalId[x.studentUid]=x.id;
   }
-  // مهم: واجهات التطبيق تعتمد أيضًا على ترتيب db.students نفسه، لا على rosterOrder وحده.
-  // لذلك نعيد ترتيب المصفوفة فعليًا بعد الدمج، مع إبقاء نسخ الطالب في مواده متجاورة
-  // وبالترتيب المعتمد نفسه داخل كل شعبة.
-  const subjectRank = { quran: 0, islamic: 1, tajweed: 2, life: 3, lifeskills: 3, 'life-skills': 3 };
-  db.students.sort((a, b) => {
-    const secA = a.section || (db.sections && db.sections[0]) || '';
-    const secB = b.section || (db.sections && db.sections[0]) || '';
-    if (secA !== secB) return String(secA).localeCompare(String(secB), 'ar');
-    const ra = a.studentUid && orderMap[a.studentUid] && orderMap[a.studentUid].section === secA ? Number(orderMap[a.studentUid].order) : Number(a.rosterOrder);
-    const rb = b.studentUid && orderMap[b.studentUid] && orderMap[b.studentUid].section === secB ? Number(orderMap[b.studentUid].order) : Number(b.rosterOrder);
-    const oa = Number.isFinite(ra) ? ra : 999999;
-    const ob = Number.isFinite(rb) ? rb : 999999;
-    if (oa !== ob) return oa - ob;
-    if ((a.studentUid || '') !== (b.studentUid || '')) return String(a.name || '').localeCompare(String(b.name || ''), 'ar');
-    return (subjectRank[a.subject || 'quran'] ?? 99) - (subjectRank[b.subject || 'quran'] ?? 99);
+  const localMerged={};
+  for(const b of BUCKETS){
+    if(b==='rosterOrder'){ localMerged[b]=mergedVal[b]||{}; continue; }
+    localMerged[b]=decanonicalizeKeys(mergedVal[b],uidToLocalId);
+  }
+  for(const b of BUCKETS) if(b!=='rosterOrder') db[b]=localMerged[b]||{};
+  db.students=Object.values(studentObj);
+  const orderMap=mergedVal.rosterOrder||{};
+  for(const st of db.students){ const rec=st.studentUid?orderMap[st.studentUid]:null; if(rec&&rec.section===(st.section||(db.sections&&db.sections[0])||'')) st.rosterOrder=rec.order; }
+  const subjectRank={quran:0,islamic:1,tajweed:2,life:3,lifeskills:3,'life-skills':3};
+  db.students.sort((a,b)=>{
+    const secA=a.section||(db.sections&&db.sections[0])||'',secB=b.section||(db.sections&&db.sections[0])||'';
+    if(secA!==secB)return String(secA).localeCompare(String(secB),'ar');
+    const oa=Number.isFinite(Number(a.rosterOrder))?Number(a.rosterOrder):999999,ob=Number.isFinite(Number(b.rosterOrder))?Number(b.rosterOrder):999999;
+    if(oa!==ob)return oa-ob;
+    if((a.studentUid||'')!==(b.studentUid||''))return String(a.name||'').localeCompare(String(b.name||''),'ar');
+    return (subjectRank[a.subject||'quran']??99)-(subjectRank[b.subject||'quran']??99);
   });
   app.save();
-  saveJSON(META_KEY, mergedMeta);
-  saveJSON(SNAP_KEY, snapshotOf(db));
+  // meta الداخلي يجب أن يطابق مفاتيح db المحلية، لا المفاتيح المنطقية uid:...
+  const localMeta=JSON.parse(JSON.stringify(mergedMeta||{}));
+  for(const b of BUCKETS) localMeta[b]=decanonicalizeMeta(localMeta[b],uidToLocalId);
+  localMeta.students={};
+  for(const s of db.students) if(s.id){
+    const ck=s.studentUid?'uid:'+s.studentUid:'id:'+s.id;
+    const m=mergedMeta.students?.[ck]; if(m) localMeta.students[s.id]=m;
+  }
+  saveJSON(META_KEY,localMeta);
+  saveJSON(SNAP_KEY,snapshotOf(db));
   app.render();
 }
 
@@ -196,11 +266,8 @@ async function syncDevices(statusEl) {
       localMeta=seeded; saveJSON(META_KEY,localMeta);
     }
 
-    const mergedVal={},mergedMeta={};
-    for(const b of [...BUCKETS,'students']){
-      const r=mergeBucket(localSnap[b],localMeta[b],remoteSnap[b],remoteMeta[b]);
-      mergedVal[b]=r.val; mergedMeta[b]=r.meta;
-    }
+    const normalized=mergeCanonicalSnapshots(localSnap,localMeta,remoteSnap,remoteMeta);
+    const mergedVal=normalized.mergedVal, mergedMeta=normalized.mergedMeta;
 
     statusEl.textContent='جارٍ رفع النتيجة المدمجة...'; saveSyncStatus(statusEl.textContent,'working');
     const upResult=await withTimeout(
