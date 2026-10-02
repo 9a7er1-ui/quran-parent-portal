@@ -9,7 +9,7 @@ const LINK_CODE_VALID_HOURS = 72; // مدة صلاحية رمز الربط قب�
 
 const META_KEY = 'quran-sync-meta-v1';   // طوابع زمنية لكل خانة (محلي فقط)
 const SNAP_KEY = 'quran-sync-prevsnap-v1'; // آخر نسخة قورنت بها التغييرات (محلي فقط)
-const BUCKETS = ['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework', 'studentSupport'];
+const BUCKETS = ['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework', 'studentSupport', 'rosterOrder'];
 
 let supa = null;
 
@@ -47,6 +47,94 @@ function uniqueStudents() {
 // ---------- محرك الدمج: خانة بخانة، بعلامة حذف صريحة (Tombstone) لا اعتمادًا على غياب المفتاح ----------
 // كل مدخل في meta هو {t: طابع زمني, deleted: هل هذا التغيير حذفًا}. الفائز هو الأحدث زمنيًا؛
 // إن كان الفائز "محذوفًا" فلا تُستعاد القيمة أبدًا من الطرف الآخر مهما كانت موجودة عنده.
+
+// ---------- توحيد مفاتيح السجلات عبر studentUid أثناء المزامنة ----------
+// التطبيق نفسه يستخدم id محليًا داخل مفاتيح الدرجات والغياب والاختبارات،
+// لذلك لا يجوز دمج هذه المفاتيح حرفيًا بين جهازين قد يكون لكل منهما id مختلف.
+function buildStudentMaps(students) {
+  const idToUid = {}, uidToIds = {}, uidSubjectToIds = {};
+  for (const st of Array.isArray(students) ? students : []) {
+    const id = String(st?.id || '');
+    const uid = String(st?.studentUid || '');
+    const subject = String(st?.subject || 'quran');
+    if (!id || !uid) continue;
+    idToUid[id] = uid;
+    (uidToIds[uid] ||= []).push(id);
+    (uidSubjectToIds[uid + '::' + subject] ||= []).push(id);
+  }
+  return { idToUid, uidToIds, uidSubjectToIds };
+}
+function canonicalStudentKey(id, maps) {
+  const sid = String(id || '');
+  return maps.idToUid[sid] ? '@uid:' + maps.idToUid[sid] : '@id:' + sid;
+}
+function splitCanonicalStudentKey(k) {
+  const s = String(k || '');
+  return s.startsWith('@uid:') ? s.slice(5) : null;
+}
+function canonicalizeBucket(bucket, val, students) {
+  const out = {};
+  const maps = buildStudentMaps(students);
+  for (const [k,v] of Object.entries(val || {})) {
+    let nk = k;
+    const parts = String(k).split('|');
+    if (bucket === 'grades' || bucket === 'absences') {
+      if (parts.length >= 5) { const u=maps.idToUid[parts[4]]; if(u) { parts[4]='@uid:'+u; nk=parts.join('|'); } }
+    } else if (bucket === 'tests' || bucket === 'approvals') {
+      if (parts.length >= 3) { const u=maps.idToUid[parts[2]]; if(u) { parts[2]='@uid:'+u; nk=parts.join('|'); } }
+    } else if (bucket === 'coursework') {
+      if (parts.length >= 6) { const u=maps.idToUid[parts[3]]; if(u) { parts[3]='@uid:'+u; nk=parts.join('|'); } }
+    } else if (bucket === 'studentSupport') {
+      const u=maps.idToUid[k]; if(u) nk='@uid:'+u;
+    } else if (bucket === 'students') {
+      const st=v || {}, u=String(st.studentUid || maps.idToUid[k] || '');
+      nk=u ? '@uid:'+u+'::'+String(st.subject || 'quran') : '@id:'+k;
+    }
+    out[nk]=v;
+  }
+  return out;
+}
+function canonicalizeMeta(bucket, meta, students) {
+  const out = {};
+  const maps = buildStudentMaps(students);
+  for (const [k,v] of Object.entries(meta || {})) {
+    let nk=k, parts=String(k).split('|');
+    if (bucket === 'grades' || bucket === 'absences') { if(parts.length>=5){const u=maps.idToUid[parts[4]];if(u){parts[4]='@uid:'+u;nk=parts.join('|')}} }
+    else if(bucket === 'tests' || bucket === 'approvals') { if(parts.length>=3){const u=maps.idToUid[parts[2]];if(u){parts[2]='@uid:'+u;nk=parts.join('|')}} }
+    else if(bucket === 'coursework') { if(parts.length>=6){const u=maps.idToUid[parts[3]];if(u){parts[3]='@uid:'+u;nk=parts.join('|')}} }
+    else if(bucket === 'studentSupport') { const u=maps.idToUid[k];if(u)nk='@uid:'+u; }
+    else if(bucket === 'students') { const u=maps.idToUid[k]; if(u) nk='@uid:'+u+'::quran'; }
+    out[nk]=v;
+  }
+  return out;
+}
+function decanonicalizeBucket(bucket, val, localStudents) {
+  const out={}, maps=buildStudentMaps(localStudents);
+  for(const [k,v] of Object.entries(val || {})){
+    let nk=k, parts=String(k).split('|');
+    if(bucket==='grades'||bucket==='absences'){if(parts.length>=5&&parts[4].startsWith('@uid:')){const ids=maps.uidToIds[parts[4].slice(5)]||[];if(ids[0]){parts[4]=ids[0];nk=parts.join('|')}}}
+    else if(bucket==='tests'||bucket==='approvals'){if(parts.length>=3&&parts[2].startsWith('@uid:')){const ids=maps.uidToIds[parts[2].slice(5)]||[];if(ids[0]){parts[2]=ids[0];nk=parts.join('|')}}}
+    else if(bucket==='coursework'){if(parts.length>=6&&parts[3].startsWith('@uid:')){const ids=maps.uidToIds[parts[3].slice(5)]||[];if(ids[0]){parts[3]=ids[0];nk=parts.join('|')}}}
+    else if(bucket==='studentSupport'&&k.startsWith('@uid:')){const ids=maps.uidToIds[k.slice(5)]||[];if(ids[0])nk=ids[0];}
+    else if(bucket==='students'&&k.startsWith('@uid:')){const raw=k.slice(5), [uid,subject]=raw.split('::');const ids=maps.uidSubjectToIds[uid+'::'+(subject||'quran')]||maps.uidToIds[uid]||[];if(ids[0])nk=ids[0];}
+    out[nk]=v;
+  }
+  return out;
+}
+function decanonicalizeMeta(bucket, meta, localStudents) {
+  const out={}, maps=buildStudentMaps(localStudents);
+  for(const [k,v] of Object.entries(meta || {})){
+    let nk=k, parts=String(k).split('|');
+    if((bucket==='grades'||bucket==='absences')&&parts.length>=5&&parts[4].startsWith('@uid:')){const ids=maps.uidToIds[parts[4].slice(5)]||[];if(ids[0]){parts[4]=ids[0];nk=parts.join('|')}}
+    else if((bucket==='tests'||bucket==='approvals')&&parts.length>=3&&parts[2].startsWith('@uid:')){const ids=maps.uidToIds[parts[2].slice(5)]||[];if(ids[0]){parts[2]=ids[0];nk=parts.join('|')}}
+    else if(bucket==='coursework'&&parts.length>=6&&parts[3].startsWith('@uid:')){const ids=maps.uidToIds[parts[3].slice(5)]||[];if(ids[0]){parts[3]=ids[0];nk=parts.join('|')}}
+    else if(bucket==='studentSupport'&&k.startsWith('@uid:')){const ids=maps.uidToIds[k.slice(5)]||[];if(ids[0])nk=ids[0];}
+    else if(bucket==='students'&&k.startsWith('@uid:')){const raw=k.slice(5),[uid,subject]=raw.split('::');const ids=maps.uidSubjectToIds[uid+'::'+(subject||'quran')]||maps.uidToIds[uid]||[];if(ids[0])nk=ids[0];}
+    out[nk]=v;
+  }
+  return out;
+}
+
 function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
   const keys = new Set([...Object.keys(localMeta || {}), ...Object.keys(remoteMeta || {}),
                          ...Object.keys(localVal || {}), ...Object.keys(remoteVal || {})]);
@@ -68,14 +156,19 @@ function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
 }
 
 // ---------- تتبع تغييرات db محليًا بعد كل save() ----------
-function emptyMeta() { return { grades: {}, absences: {}, tests: {}, approvals: {}, holidays: {}, coursework: {}, studentSupport: {}, students: {} }; }
+function emptyMeta() { return { grades: {}, absences: {}, tests: {}, approvals: {}, holidays: {}, coursework: {}, studentSupport: {}, rosterOrder: {}, students: {} }; }
 function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {} }
 
 function snapshotOf(db) {
-  const studentsById = {};
-  for (const s of db.students) studentsById[s.id] = s;
-  return { grades: db.grades, absences: db.absences, tests: db.tests, approvals: db.approvals, holidays: db.holidays, coursework: db.coursework, studentSupport: db.studentSupport || {}, students: studentsById };
+  const studentsById = {}, rosterOrder = {};
+  for (const s of db.students) {
+    studentsById[s.id] = s;
+    if (s.studentUid && (s.subject || 'quran') === 'quran') {
+      rosterOrder[s.studentUid] = { section: s.section || (db.sections && db.sections[0]) || '', order: Number.isFinite(Number(s.rosterOrder)) ? Number(s.rosterOrder) : 999999 };
+    }
+  }
+  return { grades: db.grades, absences: db.absences, tests: db.tests, approvals: db.approvals, holidays: db.holidays, coursework: db.coursework, studentSupport: db.studentSupport || {}, rosterOrder, students: studentsById };
 }
 
 function trackChange(db) {
@@ -102,44 +195,34 @@ window.__onSave = trackChange;
 // ---------- تطبيق ناتج الدمج مرة أخرى داخل db الحيّة وإعادة الرسم ----------
 function applyMergedIntoApp(mergedVal, mergedMeta) {
   const app = window.__app, db = app.db;
-  for (const b of BUCKETS) db[b] = mergedVal[b] || {};
+  for (const b of BUCKETS) if (b !== 'rosterOrder') db[b] = mergedVal[b] || {};
   const studentsArr = Object.values(mergedVal.students || {});
   db.students = studentsArr;
+  const orderMap = mergedVal.rosterOrder || {};
+  for (const st of db.students) {
+    const rec = st.studentUid ? orderMap[st.studentUid] : null;
+    if (rec && rec.section === (st.section || (db.sections && db.sections[0]) || '')) st.rosterOrder = rec.order;
+  }
+  // مهم: واجهات التطبيق تعتمد أيضًا على ترتيب db.students نفسه، لا على rosterOrder وحده.
+  // لذلك نعيد ترتيب المصفوفة فعليًا بعد الدمج، مع إبقاء نسخ الطالب في مواده متجاورة
+  // وبالترتيب المعتمد نفسه داخل كل شعبة.
+  const subjectRank = { quran: 0, islamic: 1, tajweed: 2, life: 3, lifeskills: 3, 'life-skills': 3 };
+  db.students.sort((a, b) => {
+    const secA = a.section || (db.sections && db.sections[0]) || '';
+    const secB = b.section || (db.sections && db.sections[0]) || '';
+    if (secA !== secB) return String(secA).localeCompare(String(secB), 'ar');
+    const ra = a.studentUid && orderMap[a.studentUid] && orderMap[a.studentUid].section === secA ? Number(orderMap[a.studentUid].order) : Number(a.rosterOrder);
+    const rb = b.studentUid && orderMap[b.studentUid] && orderMap[b.studentUid].section === secB ? Number(orderMap[b.studentUid].order) : Number(b.rosterOrder);
+    const oa = Number.isFinite(ra) ? ra : 999999;
+    const ob = Number.isFinite(rb) ? rb : 999999;
+    if (oa !== ob) return oa - ob;
+    if ((a.studentUid || '') !== (b.studentUid || '')) return String(a.name || '').localeCompare(String(b.name || ''), 'ar');
+    return (subjectRank[a.subject || 'quran'] ?? 99) - (subjectRank[b.subject || 'quran'] ?? 99);
+  });
   app.save();
   saveJSON(META_KEY, mergedMeta);
   saveJSON(SNAP_KEY, snapshotOf(db));
   app.render();
-}
-
-
-// ---------- حماية المزامنة: ربط مفاتيح السجلات بالطالب المشترك ----------
-function buildStudentIdMap(localStudents, remoteStudents){
-  const localByUid=new Map();
-  for(const st of Object.values(localStudents||{})) if(st.studentUid) localByUid.set(st.studentUid+'|'+(st.subject||'quran')+'|'+(st.section||''),st.id);
-  const map=new Map();
-  for(const st of Object.values(remoteStudents||{})){
-    if(!st.studentUid) continue;
-    const k=st.studentUid+'|'+(st.subject||'quran')+'|'+(st.section||'');
-    const lid=localByUid.get(k);
-    if(lid && lid!==st.id) map.set(st.id,lid);
-  }
-  return map;
-}
-function remapStudentIdInKey(key,idMap,bucket){
-  if(!idMap || !idMap.size || typeof key!=='string') return key;
-  const parts=key.split('|');
-  if(bucket==='grades' || bucket==='absences' || bucket==='tests'){
-    const i=parts.length-1;
-    if(idMap.has(parts[i])) parts[i]=idMap.get(parts[i]);
-    return parts.join('|');
-  }
-  if(bucket==='coursework' && parts.length>=4 && idMap.has(parts[3])) parts[3]=idMap.get(parts[3]);
-  return parts.join('|');
-}
-function remapBucketKeys(bucket,val,idMap){
-  const out={};
-  for(const [k,v] of Object.entries(val||{})){ const nk=remapStudentIdInKey(k,idMap,bucket); if(!(nk in out)) out[nk]=v; }
-  return out;
 }
 
 // ---------- المزامنة الثنائية الاتجاه بين الأجهزة (المعلم فقط) ----------
@@ -162,70 +245,96 @@ async function forceUploadLocal(statusEl) {
   statusEl.textContent = 'تم فرض رفع بيانات هذا الجهاز بنجاح. زامن بقية الأجهزة الآن لتحديثها.';
 }
 
+async function withTimeout(promise, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([promise,new Promise((_, reject) => {
+      timer=setTimeout(()=>reject(new Error(label+' تجاوز المهلة المحددة. تحقق من الاتصال ثم أعد المحاولة.')),ms);
+    })]);
+  } finally { if(timer) clearTimeout(timer); }
+}
 async function syncDevices(statusEl) {
-  statusEl.textContent = 'جارٍ جلب حالة الخادم...';
-  const db = window.__app.db;
-  const hadPreviousSnapshot = !!loadJSON(SNAP_KEY, null);
-  // إذا سبق لهذا الجهاز أن دخل دورة المزامنة، سجّل فقط الفروق منذ آخر لقطة.
-  // أما الجهاز الذي يدخل المزامنة لأول مرة فلا نضع على بياناته القديمة طابع «الآن» كي لا يتغلب خطأً على سحابة أحدث.
-  if (hadPreviousSnapshot) trackChange(db);
-  let localMeta = loadJSON(META_KEY, emptyMeta());
-  for (const b of [...BUCKETS, 'students']) if (!localMeta[b]) localMeta[b] = {};
-  const localSnap = snapshotOf(db);
+  const button=document.getElementById('paSyncDevices');
+  if(button) button.disabled=true;
+  try {
+    statusEl.textContent='جارٍ جلب حالة الخادم...'; saveSyncStatus(statusEl.textContent,'working');
+    const db=window.__app.db;
+    const hadPreviousSnapshot=!!loadJSON(SNAP_KEY,null);
 
-  const { data, error } = await supa.from('gradebook_state').select('*').eq('id', 'main').maybeSingle();
-  if (error) { statusEl.textContent = 'خطأ في الجلب: ' + error.message; return; }
-  const rawRemoteSnap = (data && data.db) || {};
-  const remoteMeta = (data && data.meta) || emptyMeta();
-  for (const b of [...BUCKETS, 'students']) if (!remoteMeta[b]) remoteMeta[b] = {};
-  const idMap = buildStudentIdMap(localSnap.students, rawRemoteSnap.students);
-  const remoteSnap = {...rawRemoteSnap};
-  for (const b of BUCKETS) remoteSnap[b] = remapBucketKeys(b, rawRemoteSnap[b], idMap);
-  for (const b of BUCKETS) {
-    const rm={};
-    for (const [k,v] of Object.entries(remoteMeta[b]||{})) rm[remapStudentIdInKey(k,idMap,b)]=v;
-    remoteMeta[b]=rm;
-  }
+    // مهم جدًا: لا نستدعِ trackChange() هنا.
+    // التغييرات الحقيقية تُسجَّل وقت app.save() عبر window.__onSave.
+    // استدعاء trackChange عند بدء المزامنة كان يجعل جهازًا قديمًا يمنح بياناته
+    // طابعًا زمنيًا جديدًا، فتفوز خطأً على نسخة السحابة الأحدث.
+    let localMeta=loadJSON(META_KEY,emptyMeta());
+    for(const b of [...BUCKETS,'students']) if(!localMeta[b]) localMeta[b]={};
+    const localSnap=snapshotOf(db);
 
-  // أول جهاز يرفع إلى سحابة فارغة هو مصدر البداية الموثوق: نعطي قيمه الحالية طوابع تأسيسية.
-  // بعد ذلك، أي جهاز جديد بلا لقطة سابقة يعامل بياناته القديمة كإرث أقدم من بيانات السحابة ولا يستطيع إحياء نسخة قديمة.
-  const remoteHasData = [...BUCKETS, 'students'].some(b => remoteSnap[b] && Object.keys(remoteSnap[b]).length);
-  if (!hadPreviousSnapshot && !remoteHasData) {
-    const seeded = emptyMeta(), stamp = Date.now();
-    for (const b of BUCKETS) for (const k of Object.keys(localSnap[b] || {})) seeded[b][k] = { t: stamp, deleted: false };
-    for (const k of Object.keys(localSnap.students || {})) seeded.students[k] = { t: stamp, deleted: false };
-    localMeta = seeded;
-    saveJSON(META_KEY, localMeta);
-  }
+    const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'جلب بيانات المزامنة');
+    const {data,error}=fetchResult||{};
+    if(error) throw new Error('خطأ في الجلب: '+error.message);
+    const remoteSnap=(data&&data.db)||{};
+    const remoteMeta=(data&&data.meta)||emptyMeta();
+    for(const b of [...BUCKETS,'students']) if(!remoteMeta[b]) remoteMeta[b]={};
 
-  const mergedVal = {}, mergedMeta = {};
-  for (const b of [...BUCKETS, 'students']) {
-    const r = mergeBucket(localSnap[b], localMeta[b], remoteSnap[b], remoteMeta[b]);
-    mergedVal[b] = r.val; mergedMeta[b] = r.meta;
-  }
-
-  // حاجز أمان: لا تسمح المزامنة بإسقاط قيمة محلية موجودة الآن بلا حذف محلي صريح أحدث.
-  for (const b of BUCKETS) {
-    const lv=localSnap[b]||{}, mv=mergedVal[b]||{};
-    for (const k of Object.keys(lv)) {
-      if (k in mv) continue;
-      const lm=localMeta[b]?.[k], rm=mergedMeta[b]?.[k];
-      if (!lm || !rm || Number(lm.t)>=Number(rm.t)) {
-        mv[k]=lv[k];
-        mergedMeta[b][k]=lm||{t:Date.now(),deleted:false};
-      }
+    const remoteHasData=[...BUCKETS,'students'].some(b=>remoteSnap[b]&&Object.keys(remoteSnap[b]).length);
+    if(!hadPreviousSnapshot&&!remoteHasData){
+      const seeded=emptyMeta(),stamp=Date.now();
+      for(const b of BUCKETS) for(const k of Object.keys(localSnap[b]||{})) seeded[b][k]={t:stamp,deleted:false};
+      for(const k of Object.keys(localSnap.students||{})) seeded.students[k]={t:stamp,deleted:false};
+      localMeta=seeded; saveJSON(META_KEY,localMeta);
     }
-    mergedVal[b]=mv;
-  }
 
-  statusEl.textContent = 'جارٍ رفع النتيجة المدمجة...';
-  const { error: upErr } = await supa.from('gradebook_state').upsert({
-    id: 'main', db: mergedVal, meta: mergedMeta, updated_at: new Date().toISOString()
-  });
-  if (upErr) { statusEl.textContent = 'خطأ في الرفع: ' + upErr.message; return; }
+    const mergedValCanonical={},mergedMetaCanonical={};
+    for(const b of [...BUCKETS,'students']){
+      const lVal=canonicalizeBucket(b,localSnap[b],localSnap.students ? Object.values(localSnap.students) : []);
+      const rVal=canonicalizeBucket(b,remoteSnap[b],remoteSnap.students ? Object.values(remoteSnap.students) : []);
+      const lMeta=canonicalizeMeta(b,localMeta[b],localSnap.students ? Object.values(localSnap.students) : []);
+      const rMeta=canonicalizeMeta(b,remoteMeta[b],remoteSnap.students ? Object.values(remoteSnap.students) : []);
+      const r=mergeBucket(lVal,lMeta,rVal,rMeta);
+      mergedValCanonical[b]=r.val; mergedMetaCanonical[b]=r.meta;
+    }
+    // الطلاب أولًا: نُخرج سجلات الطلاب إلى ids محلية للجهاز الحالي، ثم نفعل الشيء نفسه لبقية buckets.
+    const mergedStudents=decanonicalizeBucket('students',mergedValCanonical.students,db.students);
+    const mergedStudentsMeta=decanonicalizeMeta('students',mergedMetaCanonical.students,db.students);
+    const mergedVal={},mergedMeta={students:mergedStudentsMeta};
+    mergedVal.students=mergedStudents;
+    for(const b of BUCKETS){
+      if(b==='students') continue;
+      mergedVal[b]=decanonicalizeBucket(b,mergedValCanonical[b],mergedStudents);
+      mergedMeta[b]=decanonicalizeMeta(b,mergedMetaCanonical[b],mergedStudents);
+    }
 
-  applyMergedIntoApp(mergedVal, mergedMeta);
-  statusEl.textContent = 'تمت المزامنة بنجاح بين الأجهزة (شملت القرآن والإسلامية والتجويد خانة بخانة).';
+    statusEl.textContent='جارٍ رفع النتيجة المدمجة...'; saveSyncStatus(statusEl.textContent,'working');
+    const upResult=await withTimeout(
+      supa.from('gradebook_state').upsert({id:'main',db:mergedVal,meta:mergedMeta,updated_at:new Date().toISOString()}).select('id,updated_at').maybeSingle(),
+      20000,'رفع بيانات المزامنة'
+    );
+    const {data:savedRow,error:upErr}=upResult||{};
+    if(upErr) throw new Error('خطأ في الرفع: '+upErr.message);
+    if(!savedRow||savedRow.id!=='main') throw new Error('لم يؤكد الخادم حفظ سجل المزامنة.');
+
+    statusEl.textContent='جارٍ التحقق من البيانات المحفوظة...'; saveSyncStatus(statusEl.textContent,'working');
+    const verifyResult=await withTimeout(supa.from('gradebook_state').select('id,updated_at').eq('id','main').maybeSingle(),15000,'التحقق من حفظ المزامنة');
+    const {data:verified,error:verifyErr}=verifyResult||{};
+    if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
+    if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
+
+    // نطبّق الدمج أولًا؛ applyMergedIntoApp يحفظ snapshot/meta المطابقين للناتج.
+    applyMergedIntoApp(mergedVal,mergedMeta);
+    const successRec=saveSyncStatus('تمت المزامنة بنجاح بين الأجهزة.','success');
+    statusEl.textContent=successRec.message;
+    setTimeout(async()=>{
+      try{
+        if(document.getElementById('syncDevicesBody')) await renderCloudTab('syncDevices');
+      }catch(_){}
+      const current=document.getElementById('paSyncStatus');
+      if(current) paintSyncStatus(current,successRec);
+    },0);
+  } catch(err) {
+    console.error('Device sync failed:',err);
+    const failRec=saveSyncStatus('تعذرت المزامنة: '+(err&&err.message?err.message:String(err)),'error');
+    statusEl.textContent=failRec.message;
+  } finally { if(button) button.disabled=false; }
 }
 
 // ---------- بناء تقرير طالب واحد لعرضه لولي الأمر ----------
@@ -272,16 +381,86 @@ async function loginBox(root, returnTab) {
     if(error){status.textContent='خطأ: '+error.message;return;} await renderCloudTab(returnTab);
   };
 }
+const SYNC_STATUS_KEY='quran-device-sync-status-v1';
+function saveSyncStatus(message, kind='info'){
+  const rec={message:String(message||''),kind,at:new Date().toISOString()};
+  try{localStorage.setItem(SYNC_STATUS_KEY,JSON.stringify(rec));}catch(_){}
+  return rec;
+}
+function loadSyncStatus(){
+  try{return JSON.parse(localStorage.getItem(SYNC_STATUS_KEY)||'null');}catch(_){return null;}
+}
+function paintSyncStatus(el,rec){
+  if(!el||!rec)return;
+  const when=rec.at?new Date(rec.at).toLocaleString('ar-SA'):'';
+  el.textContent=rec.message+(when?' — '+when:'');
+  el.style.display='inline-block';
+  el.style.marginInlineStart='8px';
+  el.style.fontWeight='700';
+  el.style.border='1px solid #cbd8d2';
+  el.style.background=rec.kind==='success'?'#eef8f2':rec.kind==='error'?'#fff2f2':'#f7f8f7';
+}
+async function adoptThisDeviceRosterOrder(statusEl){
+  try{
+    const app=window.__app, counters={};
+    // نعتمد ترتيب القائمة الظاهر فعليًا في هذا الجهاز، لا قيمة قديمة محفوظة في rosterOrder.
+    for(const st of app.db.students){
+      if((st.subject || 'quran') !== 'quran' || !st.studentUid) continue;
+      const sec=st.section || (app.db.sections && app.db.sections[0]) || '';
+      const n=counters[sec] || 0;
+      st.rosterOrder=n;
+      counters[sec]=n+1;
+      // نفس ترتيب الطالب لجميع نسخه في المواد.
+      for(const copy of app.db.students){
+        if(copy.studentUid===st.studentUid && (copy.section || (app.db.sections && app.db.sections[0]) || '')===sec) copy.rosterOrder=n;
+      }
+    }
+    const snap=snapshotOf(app.db);
+    const meta=loadJSON(META_KEY,emptyMeta());
+    if(!meta.rosterOrder) meta.rosterOrder={};
+    const stamp=Date.now();
+    for(const uid of Object.keys(snap.rosterOrder||{})) meta.rosterOrder[uid]={t:stamp,deleted:false};
+    saveJSON(META_KEY,meta);
+    saveJSON(SNAP_KEY,snap);
+    app.save();
+    const rec=saveSyncStatus('تم اعتماد ترتيب الطلاب الظاهر في هذا الجهاز. جارٍ رفعه للسحابة...','working');
+    statusEl.textContent=rec.message;
+    await syncDevices(statusEl);
+  }catch(err){
+    const rec=saveSyncStatus('تعذر اعتماد ترتيب هذا الجهاز: '+(err&&err.message?err.message:String(err)),'error');
+    statusEl.textContent=rec.message;
+  }
+}
 async function renderSyncTab(root) {
-  root.innerHTML=`<div class="summary-card"><b>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</b>
-    <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
-    <button id="paSyncDevices" type="button">مزامنة الأجهزة الآن</button>
-    <button id="paForceUpload" type="button" style="background:#8a1c1c">فرض رفع بيانات هذا الجهاز (طوارئ)</button>
-    <span id="paSyncStatus" class="muted"></span></div>
-    <button id="paLogout" type="button">تسجيل خروج</button>`;
-  root.querySelector('#paSyncDevices').onclick=()=>syncDevices(root.querySelector('#paSyncStatus'));
-  root.querySelector('#paForceUpload').onclick=()=>forceUploadLocal(root.querySelector('#paSyncStatus'));
-  root.querySelector('#paLogout').onclick=async()=>{await supa.auth.signOut();loginBox(root,'syncDevices');};
+  const last=loadSyncStatus();
+  root.innerHTML=`
+    <div class="card">
+      <h3>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</h3>
+      <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
+        <button id="paAdoptRosterOrder" class="btn">اعتماد ترتيب هذا الجهاز</button>
+        <span id="paSyncStatus" role="status" aria-live="polite"
+          style="display:inline-block;min-height:24px;padding:5px 8px;border-radius:8px"></span>
+      </div>
+      <div id="paSyncLast" class="muted" style="margin-top:8px"></div>
+      <details style="margin-top:14px">
+        <summary>أداة الطوارئ</summary>
+        <p class="muted">لا تستخدمها إلا عند التأكد أن بيانات هذا الجهاز هي النسخة الصحيحة التي تريد استبدال السحابة بها.</p>
+        <button id="paForceUpload" class="btn">فرض رفع بيانات هذا الجهاز</button>
+      </details>
+    </div>`;
+  const syncStatus=root.querySelector('#paSyncStatus');
+  const lastBox=root.querySelector('#paSyncLast');
+  if(last){
+    paintSyncStatus(syncStatus,last);
+    if(last.at) lastBox.textContent='آخر حالة محفوظة: '+new Date(last.at).toLocaleString('ar-SA');
+  }else{
+    syncStatus.textContent='جاهز للمزامنة.';
+  }
+  root.querySelector('#paSyncDevices').onclick=()=>syncDevices(syncStatus);
+  root.querySelector('#paAdoptRosterOrder').onclick=()=>adoptThisDeviceRosterOrder(syncStatus);
+  root.querySelector('#paForceUpload').onclick=()=>forceUploadLocal(syncStatus);
 }
 async function renderParentTab(root) {
   const students=uniqueStudents(), semesterOptions=['الأول','الثاني'].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
