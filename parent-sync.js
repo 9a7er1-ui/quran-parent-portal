@@ -64,6 +64,24 @@ function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
     outMeta[k] = winnerMeta;
     if (!winnerMeta.deleted && winnerVal && (k in winnerVal)) outVal[k] = winnerVal[k];
   }
+  // حاجز أمان: لا يجوز لجهاز قديم أن يُسقط قيمة موجودة في السحابة لمجرد أن
+  // بياناته/الميتا المحلية لا تحمل القيمة نفسها. الحذف الحقيقي فقط هو الذي يفوز:
+  // tombstone محلي صريح، وزمنه أحدث من (أو مساويًا لـ) الميتا السحابية.
+  // هذا يحمي الدرجات الجديدة التي أضيفت من جهاز آخر، مع إبقاء الحذف المقصود يعمل.
+  for (const k of Object.keys(remoteVal || {})) {
+    if (k in outVal) continue;
+    const mL = (localMeta && localMeta[k]) || null;
+    const mR = (remoteMeta && remoteMeta[k]) || null;
+    const tL = mL ? Number(mL.t) : -1;
+    const tR = mR ? Number(mR.t) : -1;
+    const explicitLocalDeleteWins = !!(mL && mL.deleted === true && tL >= tR);
+    const explicitRemoteDelete = !!(mR && mR.deleted === true);
+    if (!explicitLocalDeleteWins && !explicitRemoteDelete) {
+      outVal[k] = remoteVal[k];
+      if (mR) outMeta[k] = mR;
+      else if (mL && !mL.deleted) outMeta[k] = mL;
+    }
+  }
   return { val: outVal, meta: outMeta };
 }
 
