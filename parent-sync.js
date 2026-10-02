@@ -183,6 +183,47 @@ async function withTimeout(promise, ms, label) {
     })]);
   } finally { if(timer) clearTimeout(timer); }
 }
+const SYNC_DIAG_KEYS = [
+  '0|0|4|0|mukrazc2-qoubmly5ti8',
+  '0|0|4|4|mukrazc2-qoubmly5ti8'
+];
+function diagPick(val, meta, k) {
+  return {
+    hasValue: !!(val && Object.prototype.hasOwnProperty.call(val, k)),
+    value: val && Object.prototype.hasOwnProperty.call(val, k) ? val[k] : null,
+    meta: meta && Object.prototype.hasOwnProperty.call(meta, k) ? meta[k] : null
+  };
+}
+async function runSyncDiagnostic(statusEl, outEl) {
+  const btn=document.getElementById('paSyncDiagnostic');
+  if(btn) btn.disabled=true;
+  try {
+    statusEl.textContent='جارٍ الفحص فقط دون رفع أي بيانات...';
+    const db=window.__app.db;
+    const localMeta=loadJSON(META_KEY,emptyMeta());
+    const localSnap=snapshotOf(db);
+    const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'جلب بيانات الفحص');
+    const {data,error}=fetchResult||{};
+    if(error) throw new Error('خطأ في الجلب: '+error.message);
+    const remoteSnap=(data&&data.db)||{};
+    const remoteMeta=(data&&data.meta)||emptyMeta();
+    const merged=mergeBucket(localSnap.grades,localMeta.grades||{},remoteSnap.grades||{},remoteMeta.grades||{});
+    const report={build:'DIAG-2026-10-02-C',at:new Date().toISOString(),keys:{}};
+    for(const k of SYNC_DIAG_KEYS){
+      report.keys[k]={
+        local:diagPick(localSnap.grades||{},localMeta.grades||{},k),
+        remote:diagPick(remoteSnap.grades||{},remoteMeta.grades||{},k),
+        merged:diagPick(merged.val||{},merged.meta||{},k)
+      };
+    }
+    saveJSON('quran-sync-debug-v1',report);
+    if(outEl) outEl.textContent=JSON.stringify(report,null,2);
+    statusEl.textContent='اكتمل الفحص دون رفع أو تغيير أي بيانات.';
+  } catch(err) {
+    statusEl.textContent='تعذر الفحص: '+(err&&err.message?err.message:String(err));
+  } finally { if(btn) btn.disabled=false; }
+}
+
 async function syncDevices(statusEl) {
   const button=document.getElementById('paSyncDevices');
   if(button) button.disabled=true;
@@ -353,14 +394,16 @@ async function renderSyncTab(root) {
     <div class="card">
       <h3>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</h3>
       <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
-      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: RP-FIX-2026-10-02-B</p>
+      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: DIAG-2026-10-02-C</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
+        <button id="paSyncDiagnostic" class="btn">فحص المزامنة دون رفع</button>
         <button id="paAdoptRosterOrder" class="btn">اعتماد ترتيب هذا الجهاز</button>
         <span id="paSyncStatus" role="status" aria-live="polite"
           style="display:inline-block;min-height:24px;padding:5px 8px;border-radius:8px"></span>
       </div>
       <div id="paSyncLast" class="muted" style="margin-top:8px"></div>
+      <pre id="paSyncDiagnosticOut" style="white-space:pre-wrap;direction:ltr;text-align:left;font-size:11px;max-height:360px;overflow:auto;background:#f7f7f7;padding:8px;border-radius:8px;margin-top:10px"></pre>
       <details style="margin-top:14px">
         <summary>أداة الطوارئ</summary>
         <p class="muted">لا تستخدمها إلا عند التأكد أن بيانات هذا الجهاز هي النسخة الصحيحة التي تريد استبدال السحابة بها.</p>
@@ -376,6 +419,7 @@ async function renderSyncTab(root) {
     syncStatus.textContent='جاهز للمزامنة.';
   }
   root.querySelector('#paSyncDevices').onclick=()=>syncDevices(syncStatus);
+  root.querySelector('#paSyncDiagnostic').onclick=()=>runSyncDiagnostic(syncStatus,root.querySelector('#paSyncDiagnosticOut'));
   root.querySelector('#paAdoptRosterOrder').onclick=()=>adoptThisDeviceRosterOrder(syncStatus);
   root.querySelector('#paForceUpload').onclick=()=>forceUploadLocal(syncStatus);
 }
