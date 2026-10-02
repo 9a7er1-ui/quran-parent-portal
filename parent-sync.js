@@ -353,6 +353,7 @@ async function renderSyncTab(root) {
     <div class="card">
       <h3>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</h3>
       <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
+      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: RP-FIX-2026-10-02-B</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
         <button id="paAdoptRosterOrder" class="btn">اعتماد ترتيب هذا الجهاز</button>
