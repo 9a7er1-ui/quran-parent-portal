@@ -270,11 +270,38 @@ async function syncDevices(statusEl) {
     if(upErr) throw new Error('خطأ في الرفع: '+upErr.message);
     if(!savedRow||savedRow.id!=='main') throw new Error('لم يؤكد الخادم حفظ سجل المزامنة.');
 
+    // تحقق تشخيصي كامل بعد الرفع: لا نكتفي بوجود السجل، بل نعيد قراءة db/meta
+    // ونقارن المفاتيح التشخيصية بما حاولنا رفعه. لا يغيّر هذا أي بيانات.
     statusEl.textContent='جارٍ التحقق من البيانات المحفوظة...'; saveSyncStatus(statusEl.textContent,'working');
-    const verifyResult=await withTimeout(supa.from('gradebook_state').select('id,updated_at').eq('id','main').maybeSingle(),15000,'التحقق من حفظ المزامنة');
+    const verifyResult=await withTimeout(
+      supa.from('gradebook_state').select('id,db,meta,updated_at').eq('id','main').maybeSingle(),
+      15000,'التحقق من حفظ المزامنة'
+    );
     const {data:verified,error:verifyErr}=verifyResult||{};
     if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
     if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
+
+    const verifyReport={
+      build:'VERIFY-2026-10-03-A',
+      at:new Date().toISOString(),
+      updated_at:verified.updated_at||null,
+      keys:{}
+    };
+    for(const k of SYNC_DIAG_KEYS){
+      verifyReport.keys[k]={
+        sent:diagPick(mergedVal.grades||{},mergedMeta.grades||{},k),
+        saved:diagPick(verified.db?.grades||{},verified.meta?.grades||{},k)
+      };
+    }
+    saveJSON('quran-sync-upload-verify-v1',verifyReport);
+    console.log('SYNC UPLOAD VERIFY',verifyReport);
+
+    const verifyMismatch=SYNC_DIAG_KEYS.some(k=>
+      JSON.stringify(verifyReport.keys[k].sent)!==JSON.stringify(verifyReport.keys[k].saved)
+    );
+    if(verifyMismatch){
+      throw new Error('الخادم أكد الطلب، لكن البيانات المحفوظة لا تطابق البيانات المرسلة. أوقف المزامنة وافتح فحص المزامنة دون رفع.');
+    }
 
     // نطبّق الدمج أولًا؛ applyMergedIntoApp يحفظ snapshot/meta المطابقين للناتج.
     applyMergedIntoApp(mergedVal,mergedMeta);
@@ -394,7 +421,7 @@ async function renderSyncTab(root) {
     <div class="card">
       <h3>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</h3>
       <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
-      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: DIAG-2026-10-02-C</p>
+      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: VERIFY-2026-10-03-A</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
         <button id="paSyncDiagnostic" class="btn">فحص المزامنة دون رفع</button>
