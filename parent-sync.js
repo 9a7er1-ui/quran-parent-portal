@@ -47,94 +47,6 @@ function uniqueStudents() {
 // ---------- محرك الدمج: خانة بخانة، بعلامة حذف صريحة (Tombstone) لا اعتمادًا على غياب المفتاح ----------
 // كل مدخل في meta هو {t: طابع زمني, deleted: هل هذا التغيير حذفًا}. الفائز هو الأحدث زمنيًا؛
 // إن كان الفائز "محذوفًا" فلا تُستعاد القيمة أبدًا من الطرف الآخر مهما كانت موجودة عنده.
-
-// ---------- توحيد مفاتيح السجلات عبر studentUid أثناء المزامنة ----------
-// التطبيق نفسه يستخدم id محليًا داخل مفاتيح الدرجات والغياب والاختبارات،
-// لذلك لا يجوز دمج هذه المفاتيح حرفيًا بين جهازين قد يكون لكل منهما id مختلف.
-function buildStudentMaps(students) {
-  const idToUid = {}, uidToIds = {}, uidSubjectToIds = {};
-  for (const st of Array.isArray(students) ? students : []) {
-    const id = String(st?.id || '');
-    const uid = String(st?.studentUid || '');
-    const subject = String(st?.subject || 'quran');
-    if (!id || !uid) continue;
-    idToUid[id] = uid;
-    (uidToIds[uid] ||= []).push(id);
-    (uidSubjectToIds[uid + '::' + subject] ||= []).push(id);
-  }
-  return { idToUid, uidToIds, uidSubjectToIds };
-}
-function canonicalStudentKey(id, maps) {
-  const sid = String(id || '');
-  return maps.idToUid[sid] ? '@uid:' + maps.idToUid[sid] : '@id:' + sid;
-}
-function splitCanonicalStudentKey(k) {
-  const s = String(k || '');
-  return s.startsWith('@uid:') ? s.slice(5) : null;
-}
-function canonicalizeBucket(bucket, val, students) {
-  const out = {};
-  const maps = buildStudentMaps(students);
-  for (const [k,v] of Object.entries(val || {})) {
-    let nk = k;
-    const parts = String(k).split('|');
-    if (bucket === 'grades' || bucket === 'absences') {
-      if (parts.length >= 5) { const u=maps.idToUid[parts[4]]; if(u) { parts[4]='@uid:'+u; nk=parts.join('|'); } }
-    } else if (bucket === 'tests' || bucket === 'approvals') {
-      if (parts.length >= 3) { const u=maps.idToUid[parts[2]]; if(u) { parts[2]='@uid:'+u; nk=parts.join('|'); } }
-    } else if (bucket === 'coursework') {
-      if (parts.length >= 6) { const u=maps.idToUid[parts[3]]; if(u) { parts[3]='@uid:'+u; nk=parts.join('|'); } }
-    } else if (bucket === 'studentSupport') {
-      const u=maps.idToUid[k]; if(u) nk='@uid:'+u;
-    } else if (bucket === 'students') {
-      const st=v || {}, u=String(st.studentUid || maps.idToUid[k] || '');
-      nk=u ? '@uid:'+u+'::'+String(st.subject || 'quran') : '@id:'+k;
-    }
-    out[nk]=v;
-  }
-  return out;
-}
-function canonicalizeMeta(bucket, meta, students) {
-  const out = {};
-  const maps = buildStudentMaps(students);
-  for (const [k,v] of Object.entries(meta || {})) {
-    let nk=k, parts=String(k).split('|');
-    if (bucket === 'grades' || bucket === 'absences') { if(parts.length>=5){const u=maps.idToUid[parts[4]];if(u){parts[4]='@uid:'+u;nk=parts.join('|')}} }
-    else if(bucket === 'tests' || bucket === 'approvals') { if(parts.length>=3){const u=maps.idToUid[parts[2]];if(u){parts[2]='@uid:'+u;nk=parts.join('|')}} }
-    else if(bucket === 'coursework') { if(parts.length>=6){const u=maps.idToUid[parts[3]];if(u){parts[3]='@uid:'+u;nk=parts.join('|')}} }
-    else if(bucket === 'studentSupport') { const u=maps.idToUid[k];if(u)nk='@uid:'+u; }
-    else if(bucket === 'students') { const u=maps.idToUid[k]; if(u) nk='@uid:'+u+'::quran'; }
-    out[nk]=v;
-  }
-  return out;
-}
-function decanonicalizeBucket(bucket, val, localStudents) {
-  const out={}, maps=buildStudentMaps(localStudents);
-  for(const [k,v] of Object.entries(val || {})){
-    let nk=k, parts=String(k).split('|');
-    if(bucket==='grades'||bucket==='absences'){if(parts.length>=5&&parts[4].startsWith('@uid:')){const ids=maps.uidToIds[parts[4].slice(5)]||[];if(ids[0]){parts[4]=ids[0];nk=parts.join('|')}}}
-    else if(bucket==='tests'||bucket==='approvals'){if(parts.length>=3&&parts[2].startsWith('@uid:')){const ids=maps.uidToIds[parts[2].slice(5)]||[];if(ids[0]){parts[2]=ids[0];nk=parts.join('|')}}}
-    else if(bucket==='coursework'){if(parts.length>=6&&parts[3].startsWith('@uid:')){const ids=maps.uidToIds[parts[3].slice(5)]||[];if(ids[0]){parts[3]=ids[0];nk=parts.join('|')}}}
-    else if(bucket==='studentSupport'&&k.startsWith('@uid:')){const ids=maps.uidToIds[k.slice(5)]||[];if(ids[0])nk=ids[0];}
-    else if(bucket==='students'&&k.startsWith('@uid:')){const raw=k.slice(5), [uid,subject]=raw.split('::');const ids=maps.uidSubjectToIds[uid+'::'+(subject||'quran')]||maps.uidToIds[uid]||[];if(ids[0])nk=ids[0];}
-    out[nk]=v;
-  }
-  return out;
-}
-function decanonicalizeMeta(bucket, meta, localStudents) {
-  const out={}, maps=buildStudentMaps(localStudents);
-  for(const [k,v] of Object.entries(meta || {})){
-    let nk=k, parts=String(k).split('|');
-    if((bucket==='grades'||bucket==='absences')&&parts.length>=5&&parts[4].startsWith('@uid:')){const ids=maps.uidToIds[parts[4].slice(5)]||[];if(ids[0]){parts[4]=ids[0];nk=parts.join('|')}}
-    else if((bucket==='tests'||bucket==='approvals')&&parts.length>=3&&parts[2].startsWith('@uid:')){const ids=maps.uidToIds[parts[2].slice(5)]||[];if(ids[0]){parts[2]=ids[0];nk=parts.join('|')}}
-    else if(bucket==='coursework'&&parts.length>=6&&parts[3].startsWith('@uid:')){const ids=maps.uidToIds[parts[3].slice(5)]||[];if(ids[0]){parts[3]=ids[0];nk=parts.join('|')}}
-    else if(bucket==='studentSupport'&&k.startsWith('@uid:')){const ids=maps.uidToIds[k.slice(5)]||[];if(ids[0])nk=ids[0];}
-    else if(bucket==='students'&&k.startsWith('@uid:')){const raw=k.slice(5),[uid,subject]=raw.split('::');const ids=maps.uidSubjectToIds[uid+'::'+(subject||'quran')]||maps.uidToIds[uid]||[];if(ids[0])nk=ids[0];}
-    out[nk]=v;
-  }
-  return out;
-}
-
 function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
   const keys = new Set([...Object.keys(localMeta || {}), ...Object.keys(remoteMeta || {}),
                          ...Object.keys(localVal || {}), ...Object.keys(remoteVal || {})]);
@@ -284,24 +196,10 @@ async function syncDevices(statusEl) {
       localMeta=seeded; saveJSON(META_KEY,localMeta);
     }
 
-    const mergedValCanonical={},mergedMetaCanonical={};
+    const mergedVal={},mergedMeta={};
     for(const b of [...BUCKETS,'students']){
-      const lVal=canonicalizeBucket(b,localSnap[b],localSnap.students ? Object.values(localSnap.students) : []);
-      const rVal=canonicalizeBucket(b,remoteSnap[b],remoteSnap.students ? Object.values(remoteSnap.students) : []);
-      const lMeta=canonicalizeMeta(b,localMeta[b],localSnap.students ? Object.values(localSnap.students) : []);
-      const rMeta=canonicalizeMeta(b,remoteMeta[b],remoteSnap.students ? Object.values(remoteSnap.students) : []);
-      const r=mergeBucket(lVal,lMeta,rVal,rMeta);
-      mergedValCanonical[b]=r.val; mergedMetaCanonical[b]=r.meta;
-    }
-    // الطلاب أولًا: نُخرج سجلات الطلاب إلى ids محلية للجهاز الحالي، ثم نفعل الشيء نفسه لبقية buckets.
-    const mergedStudents=decanonicalizeBucket('students',mergedValCanonical.students,db.students);
-    const mergedStudentsMeta=decanonicalizeMeta('students',mergedMetaCanonical.students,db.students);
-    const mergedVal={},mergedMeta={students:mergedStudentsMeta};
-    mergedVal.students=mergedStudents;
-    for(const b of BUCKETS){
-      if(b==='students') continue;
-      mergedVal[b]=decanonicalizeBucket(b,mergedValCanonical[b],mergedStudents);
-      mergedMeta[b]=decanonicalizeMeta(b,mergedMetaCanonical[b],mergedStudents);
+      const r=mergeBucket(localSnap[b],localMeta[b],remoteSnap[b],remoteMeta[b]);
+      mergedVal[b]=r.val; mergedMeta[b]=r.meta;
     }
 
     statusEl.textContent='جارٍ رفع النتيجة المدمجة...'; saveSyncStatus(statusEl.textContent,'working');
