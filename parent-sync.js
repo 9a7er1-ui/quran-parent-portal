@@ -361,12 +361,10 @@ async function syncReports(root,students) {
   let done=0;
   for(const st of students){
     const report=buildReport(st.key,st.name,st.section,sem);
-    const portalEnabled=window.__app?.db?.studentSupport?.[st.key]?.portalEnabled!==false;
     const {error}=await supa.from('students_public').upsert({
       id:st.key,
       full_name:st.name,
-      report:report,
-      portal_enabled:portalEnabled
+      report:report
     },{onConflict:'id'});
     if(error){
       status.textContent=`توقفت المزامنة عند ${st.name}: ${error.message}`;
@@ -562,8 +560,7 @@ async function latestValidLinkCode(studentId) {
 }
 
 async function createFreshLinkCode(st) {
-  const portalEnabled=window.__app?.db?.studentSupport?.[st.key]?.portalEnabled!==false;
-  const {error:upErr}=await supa.from('students_public').upsert({id:st.key,full_name:st.name,portal_enabled:portalEnabled},{onConflict:'id'});
+  const {error:upErr}=await supa.from('students_public').upsert({id:st.key,full_name:st.name},{onConflict:'id'});
   if(upErr) return {error:upErr};
   const code=randomLinkCode();
   const expiresAt=new Date(Date.now()+LINK_CODE_VALID_HOURS*3600*1000).toISOString();
