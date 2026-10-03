@@ -194,31 +194,65 @@ function diagPick(val, meta, k) {
     meta: meta && Object.prototype.hasOwnProperty.call(meta, k) ? meta[k] : null
   };
 }
+
+function syncStableJson(v) {
+  if (v === undefined) return '__UNDEFINED__';
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(syncStableJson).join(',') + ']';
+  return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + syncStableJson(v[k])).join(',') + '}';
+}
+function syncValueEqual(a,b){ return syncStableJson(a)===syncStableJson(b); }
+function syncBucketDiff(sentVal,sentMeta,savedVal,savedMeta,limit=25){
+  const sv=sentVal||{},sm=sentMeta||{},rv=savedVal||{},rm=savedMeta||{};
+  const keys=[...new Set([...Object.keys(sv),...Object.keys(sm),...Object.keys(rv),...Object.keys(rm)])].sort();
+  const samples=[]; let total=0;
+  for(const k of keys){
+    const shv=Object.prototype.hasOwnProperty.call(sv,k), rhv=Object.prototype.hasOwnProperty.call(rv,k);
+    const shm=Object.prototype.hasOwnProperty.call(sm,k), rhm=Object.prototype.hasOwnProperty.call(rm,k);
+    const valueEqual=shv===rhv&&(!shv||syncValueEqual(sv[k],rv[k]));
+    const metaEqual=shm===rhm&&(!shm||syncValueEqual(sm[k],rm[k]));
+    if(!valueEqual||!metaEqual){
+      total++;
+      if(samples.length<limit) samples.push({key:k,sent:diagPick(sv,sm,k),saved:diagPick(rv,rm,k),valueEqual,metaEqual});
+    }
+  }
+  return {sentValues:Object.keys(sv).length,savedValues:Object.keys(rv).length,sentMeta:Object.keys(sm).length,savedMeta:Object.keys(rm).length,diffCount:total,samples};
+}
+function buildFullSyncDiffReport(sentDb,sentMeta,savedDb,savedMeta,buildName){
+  const report={build:buildName,at:new Date().toISOString(),totalDiffs:0,buckets:{}};
+  for(const b of [...BUCKETS,'students']){
+    const d=syncBucketDiff(sentDb?.[b]||{},sentMeta?.[b]||{},savedDb?.[b]||{},savedMeta?.[b]||{});
+    report.buckets[b]=d; report.totalDiffs+=d.diffCount;
+  }
+  return report;
+}
+
 async function runSyncDiagnostic(statusEl, outEl) {
   const btn=document.getElementById('paSyncDiagnostic');
   if(btn) btn.disabled=true;
   try {
-    statusEl.textContent='جارٍ الفحص فقط دون رفع أي بيانات...';
+    statusEl.textContent='جارٍ الفحص الشامل فقط دون رفع أي بيانات...';
     const db=window.__app.db;
     const localMeta=loadJSON(META_KEY,emptyMeta());
+    for(const b of [...BUCKETS,'students']) if(!localMeta[b]) localMeta[b]={};
     const localSnap=snapshotOf(db);
     const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'جلب بيانات الفحص');
     const {data,error}=fetchResult||{};
     if(error) throw new Error('خطأ في الجلب: '+error.message);
-    const remoteSnap=(data&&data.db)||{};
-    const remoteMeta=(data&&data.meta)||emptyMeta();
-    const merged=mergeBucket(localSnap.grades,localMeta.grades||{},remoteSnap.grades||{},remoteMeta.grades||{});
-    const report={build:'DIAG-2026-10-02-C',at:new Date().toISOString(),keys:{}};
-    for(const k of SYNC_DIAG_KEYS){
-      report.keys[k]={
-        local:diagPick(localSnap.grades||{},localMeta.grades||{},k),
-        remote:diagPick(remoteSnap.grades||{},remoteMeta.grades||{},k),
-        merged:diagPick(merged.val||{},merged.meta||{},k)
-      };
+    const remoteSnap=(data&&data.db)||{},remoteMeta=(data&&data.meta)||emptyMeta();
+    for(const b of [...BUCKETS,'students']) if(!remoteMeta[b]) remoteMeta[b]={};
+    const mergedVal={},mergedMeta={};
+    for(const b of [...BUCKETS,'students']){
+      const r=mergeBucket(localSnap[b],localMeta[b],remoteSnap[b],remoteMeta[b]);
+      mergedVal[b]=r.val; mergedMeta[b]=r.meta;
     }
+    const report=buildFullSyncDiffReport(mergedVal,mergedMeta,remoteSnap,remoteMeta,'DIAG-FULL-2026-10-03-B');
+    report.remote_updated_at=(data&&data.updated_at)||null;
+    report.keys={};
+    for(const k of SYNC_DIAG_KEYS) report.keys[k]={local:diagPick(localSnap.grades||{},localMeta.grades||{},k),remote:diagPick(remoteSnap.grades||{},remoteMeta.grades||{},k),merged:diagPick(mergedVal.grades||{},mergedMeta.grades||{},k)};
     saveJSON('quran-sync-debug-v1',report);
     if(outEl) outEl.textContent=JSON.stringify(report,null,2);
-    statusEl.textContent='اكتمل الفحص دون رفع أو تغيير أي بيانات.';
+    statusEl.textContent='اكتمل الفحص الشامل دون رفع أو تغيير أي بيانات.';
   } catch(err) {
     statusEl.textContent='تعذر الفحص: '+(err&&err.message?err.message:String(err));
   } finally { if(btn) btn.disabled=false; }
@@ -281,26 +315,17 @@ async function syncDevices(statusEl) {
     if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
     if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
 
-    const verifyReport={
-      build:'VERIFY-2026-10-03-A',
-      at:new Date().toISOString(),
-      updated_at:verified.updated_at||null,
-      keys:{}
-    };
-    for(const k of SYNC_DIAG_KEYS){
-      verifyReport.keys[k]={
-        sent:diagPick(mergedVal.grades||{},mergedMeta.grades||{},k),
-        saved:diagPick(verified.db?.grades||{},verified.meta?.grades||{},k)
-      };
-    }
+    const verifyReport=buildFullSyncDiffReport(
+      mergedVal,mergedMeta,verified.db||{},verified.meta||{},'VERIFY-FULL-2026-10-03-B'
+    );
+    verifyReport.updated_at=verified.updated_at||null;
+    verifyReport.keys={};
+    for(const k of SYNC_DIAG_KEYS) verifyReport.keys[k]={sent:diagPick(mergedVal.grades||{},mergedMeta.grades||{},k),saved:diagPick(verified.db?.grades||{},verified.meta?.grades||{},k)};
     saveJSON('quran-sync-upload-verify-v1',verifyReport);
     console.log('SYNC UPLOAD VERIFY',verifyReport);
-
-    const verifyMismatch=SYNC_DIAG_KEYS.some(k=>
-      JSON.stringify(verifyReport.keys[k].sent)!==JSON.stringify(verifyReport.keys[k].saved)
-    );
-    if(verifyMismatch){
-      throw new Error('الخادم أكد الطلب، لكن البيانات المحفوظة لا تطابق البيانات المرسلة. أوقف المزامنة وافتح فحص المزامنة دون رفع.');
+    if(verifyReport.totalDiffs>0){
+      const badBuckets=Object.entries(verifyReport.buckets).filter(([,v])=>v.diffCount>0).map(([k,v])=>k+'='+v.diffCount).join('، ');
+      throw new Error('الخادم أكد الطلب، لكن توجد فروق فعلية بعد الحفظ ('+badBuckets+'). افتح فحص المزامنة دون رفع وأرسل التقرير.');
     }
 
     // نطبّق الدمج أولًا؛ applyMergedIntoApp يحفظ snapshot/meta المطابقين للناتج.
@@ -421,7 +446,7 @@ async function renderSyncTab(root) {
     <div class="card">
       <h3>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</h3>
       <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
-      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: VERIFY-2026-10-03-A</p>
+      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: VERIFY-FULL-2026-10-03-B</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
         <button id="paSyncDiagnostic" class="btn">فحص المزامنة دون رفع</button>
