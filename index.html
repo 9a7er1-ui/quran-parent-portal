@@ -208,7 +208,7 @@ let area=localStorage.getItem(areaKey)||'study';
 const groups={dashboard:['dashboard'],study:['register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment'],parents:['parentPortal','parentMessages'],data:['syncDevices','backup']};
 document.querySelectorAll('#mainAreas button').forEach(b=>{
  b.classList.toggle('active',b.dataset.area===area);
- b.onclick=()=>{localStorage.setItem(areaKey,b.dataset.area);tab=b.dataset.area==='dashboard'?'dashboard':b.dataset.area==='students'?'students':b.dataset.area==='parents'?'parentPortal':b.dataset.area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');localStorage.setItem('quran-last-tab',tab);edit='';render()}
+ b.onclick=()=>{area=b.dataset.area;localStorage.setItem(areaKey,area);tab=area==='dashboard'?'dashboard':area==='students'?'students':area==='parents'?'parentPortal':area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');localStorage.setItem('quran-last-tab',tab);edit='';render()}
 });
 const allowed=groups[area]||groups.study;
 Object.keys(tabs).forEach(id=>{if(!allowed.includes(id))delete tabs[id]});
