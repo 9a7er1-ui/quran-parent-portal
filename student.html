@@ -109,8 +109,22 @@ const SUPABASE_ANON_KEY = 'sb_publishable_tlHAjfYiVXXq81ponT7E-g_fniIquBM';
 let supa = null;
 const authBox = document.getElementById('authBox');
 const reportsBox = document.getElementById('reportsBox');
-const urlCode = new URLSearchParams(location.search).get('code');
-
+const PENDING_CODE_KEY = 'parent-pending-code';
+const KNOWN_KEY = 'parent-known-students';
+const SELECTED_KEY = 'parent-selected-student';
+(function captureCode(){
+  const p = new URLSearchParams(location.search);
+  const c = p.get('code');
+  if(c){
+    try{ localStorage.setItem(PENDING_CODE_KEY, c.trim().toUpperCase()); }catch(_){}
+    p.delete('code');
+    const rest = p.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : ''));
+  }
+})();
+function pendingCode(){ try{ return localStorage.getItem(PENDING_CODE_KEY); }catch(_){ return null; } }
+function clearPendingCode(){ try{ localStorage.removeItem(PENDING_CODE_KEY); }catch(_){} }
+const urlCode = pendingCode();
 function periodLabel(i){return i===0?'الأولى':'الثانية'}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
@@ -267,48 +281,90 @@ function renderTeacherPreview(){
  const raw=sessionStorage.getItem('quran-student-page-preview');if(!raw)return false;let row;try{row=JSON.parse(raw)}catch(_){return false}
  __teacherPreviewRow=row;reportSemester=Number(row.activeSemester??reportSemester);authBox.style.display='none';reportsBox.style.display='block';renderTeacherPreviewRow(row);return true
 }
-async function showReports(){
-  authBox.style.display = 'none';
-  reportsBox.style.display = 'block';
-  reportsBox.innerHTML = '<p class="muted">جارٍ التحميل...</p>';
+function logoutButton(){
+  const b=document.createElement('button');
+  b.type='button'; b.textContent='تسجيل الخروج'; b.className='secondary';
+  b.onclick=async()=>{ await supa.auth.signOut(); location.reload(); };
+  return b;
+}
+function showMessage(html){
+  reportsBox.innerHTML=`<section>${html}</section>`;
+  reportsBox.querySelector('section').appendChild(logoutButton());
+}
+function loadKnown(){ try{ return JSON.parse(localStorage.getItem(KNOWN_KEY))||[]; }catch(_){ return []; } }
+function saveKnown(ids){ try{ localStorage.setItem(KNOWN_KEY, JSON.stringify(ids)); }catch(_){} }
 
-  if(urlCode){
-    const { error } = await supa.rpc('redeem_link_code', { p_code: urlCode });
-    history.replaceState(null, '', location.pathname);
-    if(error){
-      reportsBox.innerHTML = `<section><p class="error">تعذّر ربط الحساب: ${escapeHtml(error.message)}</p></section>`;
-      return;
-    }
+let __parentRows=[], __parentNotice='';
+function renderParentView(){
+  const rows=__parentRows;
+  let sel=null; try{ sel=localStorage.getItem(SELECTED_KEY); }catch(_){}
+  const row=rows.find(r=>r.id===sel)||rows[0];
+  const switcher=rows.length>1?`<section><label style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>اختر الابن:</b><select id="childSelect" style="font:inherit;padding:8px;border:1px solid #aac1b4;border-radius:7px;min-width:220px">${rows.map(r=>`<option value="${escapeHtml(r.id)}"${r.id===row.id?' selected':''}>${escapeHtml(r.full_name||r.report?.name||'طالب')}</option>`).join('')}</select></label></section>`:'';
+  const notice=__parentNotice?`<section><div class="card warning-card">${__parentNotice}</div></section>`:'';
+  reportsBox.innerHTML=notice+switcher+renderStudentCard(row);
+  const cs=document.getElementById('childSelect');
+  if(cs) cs.onchange=()=>{ try{ localStorage.setItem(SELECTED_KEY, cs.value); }catch(_){} __parentNotice=''; renderParentView(); };
+  wireReportControls(renderParentView);
+  wireParentChats();
+  const wrap=document.createElement('section'); wrap.appendChild(logoutButton()); reportsBox.appendChild(wrap);
+}
+
+async function showReports(){
+  authBox.style.display='none';
+  reportsBox.style.display='block';
+  reportsBox.innerHTML='<section><p class="muted">جارٍ التحميل...</p></section>';
+
+  const { data: teacherFlag } = await supa.rpc('is_teacher');
+  if(teacherFlag === true){
+    showMessage('<p class="error">أنت مسجّل الآن بحساب المعلم. سجّل الخروج ثم ادخل بحساب ولي الأمر.</p>');
+    return;
+  }
+
+  const code=pendingCode();
+  let linkError=null;
+  if(code){
+    const { error } = await supa.rpc('redeem_link_code', { p_code: code });
+    clearPendingCode();
+    if(error) linkError=error.message;
   }
 
   const { data, error } = await supa.from('students_public').select('*');
-  if(error){
-    reportsBox.innerHTML = `<section><p class="error">تعذّر جلب البيانات: ${error.message}</p></section>`;
+  if(error){ showMessage(`<p class="error">تعذّر جلب البيانات: ${escapeHtml(error.message)}</p>`); return; }
+  const rows=data||[];
+
+  if(!rows.length){
+    if(linkError) showMessage(`<p class="error">تعذّر ربط الحساب: ${escapeHtml(linkError)}</p><p class="muted">اطلب من المعلم رمزًا جديدًا.</p>`);
+    else showMessage('<p class="muted">لا يوجد أي طالب مرتبط بحسابك بعد. امسح باركود الطالب الذي أعطاك إياه المعلم.</p>');
     return;
   }
-  if(!data.length){
-    reportsBox.innerHTML = '<section><p class="muted">لا يوجد أي طالب مرتبط بحسابك بعد. استخدم رابط/باركود الطالب الذي أعطاك إياه المعلم.</p></section>';
-  } else {
-    reportsBox.innerHTML = data.map(renderStudentCard).join('');
-    wireReportControls(()=>showReports());
-    await wireParentChats();
-    for(const row of data) supa.rpc('mark_report_viewed',{p_student_id:row.id}).catch(()=>{});
-  }
-  const logout = document.createElement('button');
-  logout.textContent = 'تسجيل الخروج';
-  logout.className = 'secondary';
-  logout.onclick = async () => { await supa.auth.signOut(); location.reload(); };
-  reportsBox.appendChild(logout);
+
+  const known=loadKnown();
+  const fresh=rows.find(r=>!known.includes(r.id));
+  if(fresh && code && !linkError){ try{ localStorage.setItem(SELECTED_KEY, fresh.id); }catch(_){} }
+  saveKnown(rows.map(r=>r.id));
+
+  __parentNotice = linkError ? 'هذا الرابط استُخدم من قبل أو انتهت صلاحيته. إذا كان لابنك المعروض أدناه فلا مشكلة، فحسابك مربوط به. وإذا كان لابن آخر فاطلب من المعلم رمزًا جديدًا.' : '';
+  __parentRows=rows;
+  renderParentView();
+  for(const row of rows) supa.rpc('mark_report_viewed',{p_student_id:row.id}).then(()=>{},()=>{});
+}
+
+function friendlyAuthError(m){
+  if(m==='Invalid login credentials') return 'البريد أو كلمة المرور غير صحيحة.';
+  if(/already registered/i.test(m)) return 'هذا البريد مسجّل من قبل، اختر «لديّ حساب».';
+  if(/Password should be/i.test(m)) return 'كلمة المرور قصيرة، اكتب 6 خانات على الأقل.';
+  return m;
 }
 
 function renderAuthForm(mode){
+  const hasCode=!!pendingCode();
   authBox.innerHTML = `
     <section>
       <div class="tabs">
         <button id="tabLogin" class="${mode==='login'?'active':''}" type="button">لديّ حساب</button>
         <button id="tabSignup" class="${mode==='signup'?'active':''}" type="button">حساب جديد</button>
       </div>
-      ${urlCode ? '<p class="muted">تم رصد رمز طالب في الرابط، سيُربط بحسابك بعد تسجيل الدخول/إنشاء الحساب.</p>' : ''}
+      ${hasCode ? '<p class="muted">تم حفظ رمز الطالب، وسيُربط بحسابك تلقائيًا بعد تسجيل الدخول أو إنشاء الحساب.</p>' : ''}
       <input id="paEmail" type="email" placeholder="البريد الإلكتروني">
       <input id="paPass" type="password" placeholder="كلمة المرور">
       <button id="paSubmit" type="button">${mode==='login'?'تسجيل الدخول':'إنشاء الحساب'}</button>
@@ -322,14 +378,15 @@ function renderAuthForm(mode){
     const msg = document.getElementById('paMsg');
     if(!email || !password){ msg.textContent = 'أدخل البريد وكلمة المرور.'; return; }
     msg.textContent = 'جارٍ المعالجة...'; msg.classList.remove('error');
-    const fn = mode === 'login' ? supa.auth.signInWithPassword : supa.auth.signUp;
-    const { error } = await fn.call(supa.auth, { email, password });
-    if(error){ msg.textContent = error.message; msg.classList.add('error'); return; }
-    if(mode === 'signup'){
-      msg.textContent = 'إذا طُلب تأكيد البريد، افتح الرابط المُرسَل إليك ثم أعد فتح هذه الصفحة (نفس رابط الباركود إن وُجد).';
-      return;
+    if(mode === 'login'){
+      const { error } = await supa.auth.signInWithPassword({ email, password });
+      if(error){ msg.textContent = friendlyAuthError(error.message); msg.classList.add('error'); return; }
+      showReports(); return;
     }
-    showReports();
+    const { data, error } = await supa.auth.signUp({ email, password, options:{ emailRedirectTo: location.origin + location.pathname } });
+    if(error){ msg.textContent = friendlyAuthError(error.message); msg.classList.add('error'); return; }
+    if(data && data.session){ showReports(); return; }
+    msg.textContent = 'أرسلنا رسالة تأكيد إلى بريدك. افتحها من هذا الجهاز نفسه، وسيُربط ابنك تلقائيًا بعد الدخول.';
   };
 }
 
@@ -342,11 +399,11 @@ if(!teacherPreview) (async () => {
   try{
     supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }catch(err){
-    authBox.innerHTML = '<section><p class="error">تعذّر الاتصال بـ Supabase: ' + err.message + '</p></section>';
+    authBox.innerHTML = '<section><p class="error">تعذّر الاتصال بـ Supabase: ' + escapeHtml(err.message) + '</p></section>';
     return;
   }
   const { data } = await supa.auth.getSession();
-  if(data.session) showReports(); else renderAuthForm(urlCode ? 'signup' : 'login');
+  if(data.session) showReports(); else renderAuthForm(pendingCode() ? 'signup' : 'login');
 })();
 </script>
 </body></html>
