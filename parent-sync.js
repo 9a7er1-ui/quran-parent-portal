@@ -551,7 +551,8 @@ async function latestValidLinkCode(studentId) {
   const nowIso = new Date().toISOString();
   const {data,error}=await supa.from('link_codes')
     .select('code,expires_at')
-    .eq('student_id',studentId)
+.eq('student_id',studentId)
+    .eq('used',false)
     .gt('expires_at',nowIso)
     .order('expires_at',{ascending:false})
     .limit(1);
