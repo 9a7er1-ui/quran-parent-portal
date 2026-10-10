@@ -654,6 +654,12 @@ async function renderSyncTab(root) {
     <details id="fsHistDetails"><summary>سجل النسخ في السحابة (للرجوع إلى نسخة سابقة)</summary>
       <p class="muted">قبل كل جلسة رصد تُحفظ نسخة من حالة البيانات تلقائيًا (آخر 30 نسخة). «معاينة» لا تكتب شيئًا، وتعرض ما سيتغير قبل أي استعادة.</p>
       <div id="fsHistList" style="overflow-x:auto"></div></details>
+    <details id="fsShareDetails"><summary>مشاركة للقراءة فقط لمدة 24 ساعة (باركود)</summary>
+      <p class="muted">لمن تريد أن يطّلع على الدرجات والغياب والتقارير دون أي صلاحية تعديل، كالمدير أو المشرف. لا تظهر له متابعة الطلاب ولا ملاحظاتك ولا قسما أولياء الأمور وإدارة البيانات. ينتهي الرابط بعد 24 ساعة تلقائيًا، ويمكنك إلغاؤه قبل ذلك.</p>
+      <label>اسم المستلم (اختياري): <input id="fsShareLabel" type="text" maxlength="60" placeholder="مثال: مدير المدرسة"></label>
+      <button id="fsShareCreate" type="button">إنشاء باركود مشاهدة لمدة 24 ساعة</button>
+      <div id="fsShareOut" style="margin:10px 0"></div>
+      <div id="fsShareList" style="overflow-x:auto"></div></details>
     <p id="fsStatus" class="muted" style="font-weight:bold"></p>
     <div id="fsSummary" style="overflow-x:auto;margin-top:12px"></div>
     <button id="fsRestoreBtn" type="button" disabled style="display:none"></button></div>
@@ -661,6 +667,9 @@ async function renderSyncTab(root) {
   const ui = { status: root.querySelector('#fsStatus'), summary: root.querySelector('#fsSummary'), upBtn: root.querySelector('#fsUp'), downBtn: root.querySelector('#fsDown'), restoreBtn: root.querySelector('#fsRestoreBtn') };
   ui.restoreBtn.onclick = () => fsRestoreCloudVersion(ui);
   root.querySelector('#fsHistDetails').addEventListener('toggle', e => { if (e.target.open) fsRenderHistory(root, ui); });
+  const shareList = root.querySelector('#fsShareList');
+  root.querySelector('#fsShareDetails').addEventListener('toggle', e => { if (e.target.open) fsRenderViewerLinks(shareList); });
+  root.querySelector('#fsShareCreate').onclick = () => fsCreateViewerLink(root.querySelector('#fsShareLabel').value.trim(), root.querySelector('#fsShareOut'), () => fsRenderViewerLinks(shareList));
   root.querySelector('#fsState').textContent = fsDeviceStateText();
   const tg = root.querySelector('#fsAutoToggle'); tg.checked = fsAutoEnabled();
   tg.onchange = () => { localStorage.setItem(FS_AUTO_KEY, tg.checked ? '1' : '0'); if (tg.checked) fsAutoRun('toggle'); else fsBadge('المزامنة التلقائية متوقفة على هذا الجهاز', 'warn'); };
@@ -822,6 +831,90 @@ async function fsRenderHistory(root, ui) {
     }
     host.appendChild(t);
   } catch (e) { host.textContent = e.message; }
+}
+
+
+// ============================================================
+// مشاركة للقراءة فقط لمدة 24 ساعة (باركود)
+// الرمز يُولَّد على هذا الجهاز ولا يُرسَل إلى أي موقع آخر؛ يُحفظ في السحابة بصمته فقط.
+// الصلاحية والإلغاء يُفحصان في الخادم (get_shared_gradebook)، والمشاهد لا يملك أي صلاحية كتابة.
+// ============================================================
+const VIEWER_URL = PARENT_PORTAL_URL.replace(/student\.html.*$/, 'viewer.html');
+const QR_LIB_URL = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+
+function fsB64url(bytes) { let s = ''; bytes.forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+async function fsSha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function fsQrSvg(text) {
+  if (!window.qrcode) await loadScript(QR_LIB_URL);
+  const qr = window.qrcode(0, 'M'); qr.addData(text); qr.make();
+  return qr.createSvgTag(5, 3);
+}
+
+async function fsCreateViewerLink(label, out, onDone) {
+  out.textContent = 'جارٍ إنشاء الرابط...';
+  try {
+    const token = fsB64url(crypto.getRandomValues(new Uint8Array(32)));
+    const hash = await fsSha256Hex(token);
+    const { data, error } = await supa.from('viewer_links').insert({ token_hash: hash, label: label || null }).select('id,expires_at').single();
+    if (error) throw new Error(error.message);
+    const url = VIEWER_URL + '#t=' + token;
+    out.replaceChildren();
+    const head = document.createElement('div');
+    head.innerHTML = '<b>باركود المشاهدة جاهز</b> — ' + (label ? 'للمستلم: ' + escapeHtml(label) + ' — ' : '') + 'ينتهي ' + escapeHtml(new Date(data.expires_at).toLocaleString('ar-SA'));
+    out.appendChild(head);
+    const qrBox = document.createElement('div'); qrBox.style.cssText = 'margin:10px auto;text-align:center;background:#fff;display:inline-block;padding:6px;border-radius:8px';
+    try { qrBox.innerHTML = await fsQrSvg(url); } catch (_) { qrBox.textContent = 'تعذّر رسم الباركود؛ استخدم الرابط أدناه.'; }
+    const wrap = document.createElement('div'); wrap.style.textAlign = 'center'; wrap.appendChild(qrBox); out.appendChild(wrap);
+    const linkRow = document.createElement('div'); linkRow.style.cssText = 'direction:ltr;text-align:left;word-break:break-all;font-size:12px;background:#f3f6f4;padding:6px;border-radius:6px';
+    linkRow.textContent = url; out.appendChild(linkRow);
+    const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = 'نسخ الرابط';
+    copy.onclick = async () => { try { await navigator.clipboard.writeText(url); copy.textContent = 'تم النسخ ✓'; } catch (_) { copy.textContent = 'انسخه يدويًا من السطر أعلاه'; } };
+    out.appendChild(copy);
+    const note = document.createElement('p'); note.className = 'muted';
+    note.textContent = 'صوّر الباركود أو انسخ الرابط الآن؛ لا يمكن عرضه مرة أخرى بعد إغلاق هذه الصفحة لأنه لا يُحفظ في أي مكان. من يملكه يرى الدرجات والغياب والتقارير لجميع الطلاب حتى انتهاء المدة، دون أي صلاحية تعديل.';
+    out.appendChild(note);
+    onDone && onDone();
+  } catch (e) { out.textContent = 'تعذّر إنشاء الرابط: ' + e.message; }
+}
+
+async function fsRenderViewerLinks(host) {
+  host.textContent = 'جارٍ التحميل...';
+  try {
+    const { data, error } = await supa.from('viewer_links').select('id,label,created_at,expires_at,revoked,last_used_at,use_count').order('created_at', { ascending: false }).limit(20);
+    if (error) throw new Error(error.message);
+    host.replaceChildren();
+    if (!data || !data.length) { host.textContent = 'لا توجد روابط مشاهدة بعد.'; return; }
+    const t = document.createElement('table'); t.style.cssText = 'width:100%;min-width:560px';
+    t.innerHTML = '<thead><tr><th>المستلم</th><th>أُنشئ</th><th>الحالة</th><th>مرات الفتح</th><th></th></tr></thead><tbody></tbody>';
+    for (const r of data) {
+      const active = !r.revoked && new Date(r.expires_at).getTime() > Date.now();
+      const state = r.revoked ? 'أُلغي' : active ? 'نشط حتى ' + new Date(r.expires_at).toLocaleString('ar-SA') : 'انتهى';
+      const tr = document.createElement('tr');
+      for (const v of [r.label || '—', new Date(r.created_at).toLocaleString('ar-SA'), state, (r.use_count || 0) + (r.last_used_at ? ' (آخرها ' + new Date(r.last_used_at).toLocaleString('ar-SA') + ')' : '')]) {
+        const td = document.createElement('td'); td.textContent = String(v); tr.appendChild(td);
+      }
+      const td = document.createElement('td');
+      if (active) {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = 'إلغاء الآن';
+        b.onclick = async () => {
+          if (!confirm('إلغاء هذا الرابط فورًا؟ لن يستطيع صاحبه فتح البيانات بعد الآن.')) return;
+          const { error: ue } = await supa.from('viewer_links').update({ revoked: true }).eq('id', r.id);
+          if (ue) alert('تعذّر الإلغاء: ' + ue.message);
+          fsRenderViewerLinks(host);
+        };
+        td.appendChild(b);
+      }
+      tr.appendChild(td); t.tBodies[0].appendChild(tr);
+    }
+    host.appendChild(t);
+  } catch (e) {
+    host.textContent = /viewer_links|relation|does not exist|schema cache/i.test(e.message)
+      ? 'ميزة المشاركة تحتاج تجهيز قاعدة البيانات أولًا (ملف viewer-links.sql).'
+      : 'تعذّرت قراءة الروابط: ' + e.message;
+  }
 }
 
 // ============================================================
