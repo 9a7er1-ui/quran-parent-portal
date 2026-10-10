@@ -105,7 +105,7 @@ const FS_IDB_NAME = 'quran-fullsync-v2';
 const FS_UI_FIELDS = ['activeSection', 'activeSubject', 'view', 'lastBackupAt']; // تُنقل، لكنها لا تُعدّ «تعديلًا على البيانات»
 const FS_LS_WARN_CHARS = 2000000;
 
-const fsSim = { up: null, down: null };
+const fsSim = { up: null, down: null, restore: null };
 
 function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (_) { return false; } }
@@ -363,7 +363,7 @@ async function fsPostReloadCheck() {
   let stored = null, memOk = false;
   try { stored = fsReadStoredDb(); memOk = fsDeepDiff(stored, fsClone(window.__app.db), 1).count === 0; } catch (_) {}
   const fpNow = stored ? fsFp(stored) : '';
-  const kindText = { upload: 'الرفع الأول من هذا الجهاز', receive: 'الاستقبال من السحابة', restore: 'استعادة النسخة الاحتياطية', 'auto-receive': 'استقبال تلقائي لآخر نسخة من السحابة' }[pend.kind] || pend.kind;
+  const kindText = { upload: 'الرفع الأول من هذا الجهاز', receive: 'الاستقبال من السحابة', restore: 'استعادة النسخة الاحتياطية', 'auto-receive': 'استقبال تلقائي لآخر نسخة من السحابة', 'restore-cloud': 'استعادة نسخة من سجل السحابة' }[pend.kind] || pend.kind;
   if (stored && memOk && fpNow === pend.expectedFp) {
     if (pend.kind !== 'restore') saveJSON(FS_BASE_KEY, { contentFp: pend.contentFp, fp: pend.expectedFp, at: new Date().toISOString(), kind: pend.kind });
     localStorage.removeItem(FS_PENDING_KEY);
@@ -481,6 +481,8 @@ async function fsSimulateUpload(ui) {
 // رفع حزمة إلى السحابة ثم قراءتها عكسيًا ومقارنتها كاملة؛ عند أي اختلاف تُعاد السحابة لحالتها السابقة
 async function fsPushPayload(payload, meta, prevFull, say) {
   const fp = meta.fp;
+  say && say('حفظ النسخة السابقة في سجل النسخ...');
+  try { await fsSnapshotCloud(prevFull, 'قبل الرفع', false); } catch (e) { console.warn(e); }
   say && say('جارٍ الرفع...');
   const { error } = await supa.from('gradebook_state').upsert({ id: FULL_ROW_ID, db: payload, meta, updated_at: new Date().toISOString() });
   if (error) throw new Error('رفضت السحابة الرفع: ' + error.message + ' (لم يتغير شيء على هذا الجهاز)');
@@ -495,7 +497,11 @@ async function fsPushPayload(payload, meta, prevFull, say) {
 function fsMakeMeta(payload, src, plan) {
   return { format: FULL_FORMAT, fp: fsFp(payload), contentFp: fsContentFp(payload), sourceFp: fsFp(src), firstTransfer: plan.firstTransfer,
     removedIslamicTests: plan.removed.length, islamicTests: fsIslamicTestCount(payload), students: payload.students.length,
-    uploadedAt: new Date().toISOString(), device: (navigator.userAgent || '').slice(0, 140) };
+    uploadedAt: new Date().toISOString(), device: (navigator.userAgent || '').slice(0, 140), deviceKind: fsThisDeviceKind() };
+}
+function fsThisDeviceKind() {
+  const ua = navigator.userAgent || '';
+  return (/iPad|iPhone/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) ? 'ipad' : 'laptop';
 }
 
 // ---------- ٢) الرفع الحقيقي ----------
@@ -629,7 +635,7 @@ function fsDeviceStateText() {
 }
 
 async function renderSyncTab(root) {
-  fsSim.up = null; fsSim.down = null;
+  fsSim.up = null; fsSim.down = null; fsSim.restore = null;
   root.innerHTML = `<div class="summary-card"><b>النقل الكامل الآمن بين الأجهزة</b>
     <p class="muted">ينقل قاعدة البيانات كاملة بكل حقولها دون أي دمج مع بيانات السحابة القديمة. لا يتفعّل أي زر حقيقي قبل نجاح المحاكاة، وتُنزَّل نسخة احتياطية قبل كل استبدال. أغلق أي نافذة أخرى مفتوحة للتطبيق على هذا الجهاز قبل البدء.</p>
     <p id="fsState" class="muted"></p>
@@ -645,10 +651,16 @@ async function renderSyncTab(root) {
       <button id="fsBackupNow" type="button">تنزيل نسخة احتياطية كاملة من هذا الجهاز</button>
       <button id="fsExportCloud" type="button">تنزيل نسخة من السحابة (قراءة فقط)</button>
       <div id="fsBackups"></div></details>
+    <details id="fsHistDetails"><summary>سجل النسخ في السحابة (للرجوع إلى نسخة سابقة)</summary>
+      <p class="muted">قبل كل جلسة رصد تُحفظ نسخة من حالة البيانات تلقائيًا (آخر 30 نسخة). «معاينة» لا تكتب شيئًا، وتعرض ما سيتغير قبل أي استعادة.</p>
+      <div id="fsHistList" style="overflow-x:auto"></div></details>
     <p id="fsStatus" class="muted" style="font-weight:bold"></p>
-    <div id="fsSummary" style="overflow-x:auto;margin-top:12px"></div></div>
+    <div id="fsSummary" style="overflow-x:auto;margin-top:12px"></div>
+    <button id="fsRestoreBtn" type="button" disabled style="display:none"></button></div>
     <button id="paLogout" type="button">تسجيل خروج</button>`;
-  const ui = { status: root.querySelector('#fsStatus'), summary: root.querySelector('#fsSummary'), upBtn: root.querySelector('#fsUp'), downBtn: root.querySelector('#fsDown') };
+  const ui = { status: root.querySelector('#fsStatus'), summary: root.querySelector('#fsSummary'), upBtn: root.querySelector('#fsUp'), downBtn: root.querySelector('#fsDown'), restoreBtn: root.querySelector('#fsRestoreBtn') };
+  ui.restoreBtn.onclick = () => fsRestoreCloudVersion(ui);
+  root.querySelector('#fsHistDetails').addEventListener('toggle', e => { if (e.target.open) fsRenderHistory(root, ui); });
   root.querySelector('#fsState').textContent = fsDeviceStateText();
   const tg = root.querySelector('#fsAutoToggle'); tg.checked = fsAutoEnabled();
   tg.onchange = () => { localStorage.setItem(FS_AUTO_KEY, tg.checked ? '1' : '0'); if (tg.checked) fsAutoRun('toggle'); else fsBadge('المزامنة التلقائية متوقفة على هذا الجهاز', 'warn'); };
@@ -671,6 +683,145 @@ async function renderSyncTab(root) {
     }
   }
   renderBackups();
+}
+
+
+// ============================================================
+// سجل النسخ في السحابة
+// • قبل أي رفع يستبدل النسخة الحالية في السحابة، تُحفظ النسخة السابقة كصف مستقل (hist-...) في الجدول نفسه
+//   (يحميه قيد «المعلم فقط» ذاته)، بحد أدنى 30 دقيقة بين لقطة وأخرى حتى يمثل كل لقطة «حالة قبل جلسة رصد».
+// • يُحتفظ بآخر 30 لقطة، وتُحذف الأقدم تلقائيًا.
+// • الاستعادة: محاكاة لا تكتب شيئًا ← نسخة احتياطية ← لقطة إجبارية من النسخة الحالية ← رفع اللقطة كنسخة معتمدة
+//   ← قراءة عكسية ومطابقة ← تطبيقها على هذا الجهاز ← تحقق بعد إعادة التحميل. الجهاز الآخر يستقبلها تلقائيًا.
+// ============================================================
+const FS_HIST_PREFIX = 'hist-';
+const FS_HIST_FORMAT = 'quran-gradebook-history-v2';
+const FS_HIST_KEEP = 30;
+const FS_HIST_SPACING_MS = 30 * 60 * 1000;
+
+function fsHistId(d) { return FS_HIST_PREFIX + d.toISOString().replace(/[-:.]/g, '').replace('T', '-').replace('Z', ''); }
+
+async function fsListHistory(limit) {
+  let q = supa.from('gradebook_state').select('id,meta,updated_at').like('id', FS_HIST_PREFIX + '%').order('id', { ascending: false });
+  if (limit) q = q.limit(limit);
+  const { data, error } = await q;
+  if (error) throw new Error('تعذّرت قراءة سجل النسخ: ' + error.message);
+  return (data || []).filter(r => r.meta && r.meta.format === FS_HIST_FORMAT);
+}
+
+// يحفظ نسخة السحابة الحالية (prevFull) كلقطة؛ force يتجاوز شرط المدة الزمنية
+async function fsSnapshotCloud(prevFull, reason, force) {
+  if (!prevFull || !prevFull.db || !prevFull.meta) return 'none';
+  const latest = (await fsListHistory(1))[0];
+  if (latest && latest.meta.contentFp === prevFull.meta.contentFp) return 'duplicate';
+  if (!force && latest && Date.now() - new Date(latest.meta.snapshotAt).getTime() < FS_HIST_SPACING_MS) return 'recent';
+  const now = new Date();
+  const meta = { format: FS_HIST_FORMAT, fp: fsFp(prevFull.db), contentFp: prevFull.meta.contentFp, students: (prevFull.db.students || []).length,
+    islamicTests: fsIslamicTestCount(prevFull.db), snapshotAt: now.toISOString(), versionUploadedAt: prevFull.meta.uploadedAt || prevFull.updated_at || null,
+    versionDevice: prevFull.meta.device || '', versionDeviceKind: prevFull.meta.deviceKind || '', reason: reason || '' };
+  const id = fsHistId(now);
+  const { error } = await supa.from('gradebook_state').insert({ id, db: prevFull.db, meta, updated_at: now.toISOString() });
+  if (error) throw new Error('تعذّر حفظ لقطة في سجل النسخ: ' + error.message);
+  const back = await fsFetchRow(id);
+  if (!back || fsFp(back.db) !== meta.fp) {
+    try { await supa.from('gradebook_state').delete().eq('id', id); } catch (_) {}
+    throw new Error('لقطة سجل النسخ لم تُحفظ مطابقة.');
+  }
+  try {
+    const all = await fsListHistory();
+    for (const old of all.slice(FS_HIST_KEEP)) await supa.from('gradebook_state').delete().eq('id', old.id);
+  } catch (_) {}
+  return 'saved';
+}
+
+function fsDeviceLabel(ua) {
+  ua = ua || '';
+  if (/iPad|iPhone/.test(ua)) return 'الآيباد';
+  if (/Windows|Linux/.test(ua)) return 'اللابتوب';
+  return '';
+}
+
+// ---------- معاينة الاستعادة (لا تكتب شيئًا) ----------
+async function fsSimulateRestore(id, ui) {
+  fsSim.restore = null; ui.restoreBtn.disabled = true; ui.restoreBtn.style.display = 'none';
+  const checks = [], check = (ok, label, detail, paths) => { checks.push({ ok: !!ok, label, detail, paths }); return ok; };
+  ui.status.textContent = 'جارٍ معاينة النسخة... لا يُكتب أي شيء.';
+  try {
+    const row = await fsFetchRow(id);
+    if (!check(!!row && !!row.db && row.meta && row.meta.format === FS_HIST_FORMAT, 'وُجدت النسخة في سجل السحابة')) throw new Error('النسخة غير موجودة.');
+    check(fsFp(row.db) === row.meta.fp, 'بصمة النسخة سليمة (لم تتغير منذ حفظها)');
+    check(fsValidDb(row.db), 'بنية النسخة صالحة ويقبلها التطبيق');
+    check(!!(row.db.syncMarks && row.db.syncMarks.islamicTestsReset), 'النسخة من بعد حذف اختبارات الإسلامية القديمة');
+    check(fsIslamicTestCount(row.db) === row.meta.islamicTests, 'لا توجد اختبارات إسلامية قديمة مستعادة', fsIslamicTestCount(row.db) + ' خانة');
+    const local = fsReadStoredDb(), base = loadJSON(FS_BASE_KEY, null);
+    const cloud = await fsFetchRow(FULL_ROW_ID, 'id,meta,updated_at');
+    const inSync = !!(local && base && cloud && cloud.meta && fsContentFp(local) === base.contentFp && cloud.meta.contentFp === base.contentFp);
+    check(inSync, 'هذا الجهاز متزامن مع السحابة (لا تعديلات غير مرفوعة على أي جهاز)', inSync ? '' : 'انتظر «✓ متزامن» على الجهازين ثم أعد المعاينة');
+    check(!(cloud && cloud.meta && cloud.meta.contentFp === row.meta.contentFp), 'النسخة تختلف عن الحالية', '');
+    const allOk = checks.every(c => c.ok);
+    fsRenderReport(ui.summary, (allOk ? '✓ المعاينة ناجحة — نسخة ' : '✗ لا يمكن استعادة هذه النسخة الآن — نسخة ') + new Date(row.meta.versionUploadedAt || row.meta.snapshotAt).toLocaleString('ar-SA'),
+      checks, local ? fsFieldRows(local, row.db, 'الآن', 'بعد الاستعادة') : null,
+      local ? fsBreakdownRows(fsCourseBreakdown(local.coursework), fsCourseBreakdown(row.db.coursework), 'الآن', 'بعد الاستعادة') : null);
+    if (allOk) {
+      fsSim.restore = { id, fp: row.meta.fp, cloudContentFp: cloud.meta.contentFp };
+      ui.restoreBtn.disabled = false; ui.restoreBtn.style.display = '';
+      ui.restoreBtn.textContent = 'استعادة هذه النسخة (' + new Date(row.meta.versionUploadedAt || row.meta.snapshotAt).toLocaleString('ar-SA') + ')';
+      ui.status.textContent = 'راجع الجدول: «الآن» مقابل «بعد الاستعادة». لم يُكتب شيء.';
+    } else ui.status.textContent = 'لم يُكتب شيء.';
+  } catch (e) { ui.status.textContent = 'تعذّرت المعاينة: ' + e.message + ' (لم يُكتب شيء)'; }
+}
+
+// ---------- الاستعادة الحقيقية ----------
+async function fsRestoreCloudVersion(ui) {
+  const sim = fsSim.restore;
+  if (!sim) { ui.status.textContent = 'اضغط «معاينة» أولًا.'; return; }
+  ui.restoreBtn.disabled = true;
+  try {
+    const row = await fsFetchRow(sim.id);
+    const current = await fsFetchRow(FULL_ROW_ID);
+    if (!row || fsFp(row.db) !== sim.fp || row.meta.fp !== sim.fp) throw new Error('تغيّرت النسخة المحفوظة بعد المعاينة؛ أعد المعاينة.');
+    if (!current || current.meta.contentFp !== sim.cloudContentFp) throw new Error('تغيّرت السحابة بعد المعاينة؛ أعد المعاينة.');
+    const local = fsReadStoredDb(), base = loadJSON(FS_BASE_KEY, null);
+    if (!base || fsContentFp(local) !== base.contentFp) throw new Error('يوجد على هذا الجهاز تعديلات بعد المعاينة؛ انتظر «✓ متزامن» وأعد المعاينة.');
+    if (!confirm('ستصبح نسخة ' + new Date(row.meta.versionUploadedAt || row.meta.snapshotAt).toLocaleString('ar-SA') + ' هي النسخة المعتمدة على السحابة وهذا الجهاز، ثم يستقبلها الجهاز الآخر تلقائيًا.\nستُحفظ النسخة الحالية أولًا في سجل النسخ وفي ملف احتياطي، فيمكن الرجوع عنها. متابعة؟')) {
+      ui.status.textContent = 'أُلغيت الاستعادة. لم يتغير شيء.'; ui.restoreBtn.disabled = false; return;
+    }
+    const wasAuto = fsAutoEnabled(); if (wasAuto) localStorage.setItem(FS_AUTO_KEY, '0');
+    try {
+      ui.status.textContent = 'إنشاء النسخة الاحتياطية...';
+      const bk = await fsMakeBackup('استعادة-نسخة-سحابية', { full: current });
+      ui.status.textContent = 'حفظ النسخة الحالية في سجل النسخ...';
+      await fsSnapshotCloud(current, 'قبل الاستعادة', true);
+      const payload = fsClone(row.db);
+      const meta = Object.assign(fsMakeMeta(payload, payload, { firstTransfer: false, removed: [] }), { restoredFrom: sim.id });
+      await fsPushPayload(payload, meta, current, t => { ui.status.textContent = t; });
+      ui.status.textContent = 'تطابقت السحابة. جارٍ تطبيق النسخة على هذا الجهاز...';
+      if (wasAuto) localStorage.setItem(FS_AUTO_KEY, '1');
+      await fsReplaceLocal(payload, 'restore-cloud', bk.id);
+    } finally { if (wasAuto) localStorage.setItem(FS_AUTO_KEY, '1'); }
+  } catch (e) { ui.status.textContent = 'توقفت الاستعادة: ' + e.message; fsSim.restore = null; }
+}
+
+async function fsRenderHistory(root, ui) {
+  const host = root.querySelector('#fsHistList');
+  host.textContent = 'جارٍ التحميل...';
+  try {
+    const list = await fsListHistory();
+    host.replaceChildren();
+    if (!list.length) { host.textContent = 'لا توجد نسخ في السجل بعد؛ ستُحفظ أول نسخة تلقائيًا عند الرفع القادم.'; return; }
+    const t = document.createElement('table'); t.style.cssText = 'width:100%;min-width:520px';
+    t.innerHTML = '<thead><tr><th>تاريخ النسخة</th><th>من جهاز</th><th>سجلات الطلاب</th><th></th></tr></thead><tbody></tbody>';
+    for (const r of list) {
+      const tr = document.createElement('tr');
+      for (const v of [new Date(r.meta.versionUploadedAt || r.meta.snapshotAt).toLocaleString('ar-SA'), ({ ipad: 'الآيباد', laptop: 'اللابتوب' }[r.meta.versionDeviceKind] || fsDeviceLabel(r.meta.versionDevice) || '—'), r.meta.students]) {
+        const td = document.createElement('td'); td.textContent = String(v); tr.appendChild(td);
+      }
+      const td = document.createElement('td'); const b = document.createElement('button'); b.type = 'button'; b.textContent = 'معاينة';
+      b.onclick = () => fsSimulateRestore(r.id, ui); td.appendChild(b); tr.appendChild(td);
+      t.tBodies[0].appendChild(tr);
+    }
+    host.appendChild(t);
+  } catch (e) { host.textContent = e.message; }
 }
 
 // ============================================================
