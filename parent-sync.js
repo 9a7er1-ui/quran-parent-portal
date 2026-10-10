@@ -7,10 +7,6 @@ const TEACHER_EMAIL = '9a7er1@gmail.com';            // لتعبئة حقل ال
 const PARENT_PORTAL_URL = 'https://9a7er1-ui.github.io/quran-parent-portal/student.html';
 const LINK_CODE_VALID_HOURS = 72; // مدة صلاحية رمز الربط قبل أن ينتهي// ============================================================
 
-const META_KEY = 'quran-sync-meta-v1';   // طوابع زمنية لكل خانة (محلي فقط)
-const SNAP_KEY = 'quran-sync-prevsnap-v1'; // آخر نسخة قورنت بها التغييرات (محلي فقط)
-const BUCKETS = ['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework', 'studentSupport', 'rosterOrder'];
-
 let supa = null;
 
 function loadScript(src) {
@@ -44,308 +40,6 @@ function uniqueStudents() {
   return [...seen.values()].sort((a, b) => a.section.localeCompare(b.section, 'ar') || a.name.localeCompare(b.name, 'ar'));
 }
 
-// ---------- محرك الدمج: خانة بخانة، بعلامة حذف صريحة (Tombstone) لا اعتمادًا على غياب المفتاح ----------
-// كل مدخل في meta هو {t: طابع زمني, deleted: هل هذا التغيير حذفًا}. الفائز هو الأحدث زمنيًا؛
-// إن كان الفائز "محذوفًا" فلا تُستعاد القيمة أبدًا من الطرف الآخر مهما كانت موجودة عنده.
-function mergeBucket(localVal, localMeta, remoteVal, remoteMeta) {
-  const keys = new Set([...Object.keys(localMeta || {}), ...Object.keys(remoteMeta || {}),
-                         ...Object.keys(localVal || {}), ...Object.keys(remoteVal || {})]);
-  const outVal = {}, outMeta = {};
-  for (const k of keys) {
-    const mL = (localMeta && localMeta[k]) || null, mR = (remoteMeta && remoteMeta[k]) || null;
-    const tL = mL ? mL.t : -1, tR = mR ? mR.t : -1;
-    if (tL === -1 && tR === -1) {
-      // بيانات قديمة قبل تفعيل هذه الميزة على أي الجهازين: لا حذف معروف، أبقِ القيمة إن وُجدت في أي طرف
-      if (localVal && k in localVal) outVal[k] = localVal[k];
-      else if (remoteVal && k in remoteVal) outVal[k] = remoteVal[k];
-      continue;
-    }
-    const localWins = tL >= tR, winnerMeta = localWins ? mL : mR, winnerVal = localWins ? localVal : remoteVal;
-    outMeta[k] = winnerMeta;
-    if (!winnerMeta.deleted && winnerVal && (k in winnerVal)) outVal[k] = winnerVal[k];
-  }
-  // حاجز أمان: لا يجوز لجهاز قديم أن يُسقط قيمة موجودة في السحابة لمجرد أن
-  // بياناته/الميتا المحلية لا تحمل القيمة نفسها. الحذف الحقيقي فقط هو الذي يفوز:
-  // tombstone محلي صريح، وزمنه أحدث من (أو مساويًا لـ) الميتا السحابية.
-  // هذا يحمي الدرجات الجديدة التي أضيفت من جهاز آخر، مع إبقاء الحذف المقصود يعمل.
-  for (const k of Object.keys(remoteVal || {})) {
-    if (k in outVal) continue;
-    const mL = (localMeta && localMeta[k]) || null;
-    const mR = (remoteMeta && remoteMeta[k]) || null;
-    const tL = mL ? Number(mL.t) : -1;
-    const tR = mR ? Number(mR.t) : -1;
-    const explicitLocalDeleteWins = !!(mL && mL.deleted === true && tL >= tR);
-    const explicitRemoteDelete = !!(mR && mR.deleted === true);
-    if (!explicitLocalDeleteWins && !explicitRemoteDelete) {
-      outVal[k] = remoteVal[k];
-      if (mR) outMeta[k] = mR;
-      else if (mL && !mL.deleted) outMeta[k] = mL;
-    }
-  }
-  return { val: outVal, meta: outMeta };
-}
-
-// ---------- تتبع تغييرات db محليًا بعد كل save() ----------
-function emptyMeta() { return { grades: {}, absences: {}, tests: {}, approvals: {}, holidays: {}, coursework: {}, studentSupport: {}, rosterOrder: {}, students: {} }; }
-function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } }
-function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {} }
-
-function snapshotOf(db) {
-  const studentsById = {}, rosterOrder = {};
-  for (const s of db.students) {
-    studentsById[s.id] = s;
-    if (s.studentUid && (s.subject || 'quran') === 'quran') {
-      rosterOrder[s.studentUid] = { section: s.section || (db.sections && db.sections[0]) || '', order: Number.isFinite(Number(s.rosterOrder)) ? Number(s.rosterOrder) : 999999 };
-    }
-  }
-  return { grades: db.grades, absences: db.absences, tests: db.tests, approvals: db.approvals, holidays: db.holidays, coursework: db.coursework, studentSupport: db.studentSupport || {}, rosterOrder, students: studentsById };
-}
-
-function trackChange(db) {
-  const meta = loadJSON(META_KEY, emptyMeta());
-  for (const b of [...BUCKETS, 'students']) if (!meta[b]) meta[b] = {};
-  const prev = loadJSON(SNAP_KEY, null);
-  const cur = snapshotOf(db);
-  const now = Date.now();
-  for (const b of BUCKETS) {
-    const curB = cur[b] || {}, prevB = (prev && prev[b]) || {};
-    for (const k of new Set([...Object.keys(curB), ...Object.keys(prevB)])) {
-      if (JSON.stringify(curB[k]) !== JSON.stringify(prevB[k])) meta[b][k] = { t: now, deleted: !(k in curB) };
-    }
-  }
-  const curS = cur.students, prevS = (prev && prev.students) || {};
-  for (const id of new Set([...Object.keys(curS), ...Object.keys(prevS)])) {
-    if (JSON.stringify(curS[id]) !== JSON.stringify(prevS[id])) meta.students[id] = { t: now, deleted: !(id in curS) };
-  }
-  saveJSON(META_KEY, meta);
-  saveJSON(SNAP_KEY, cur);
-}
-window.__onSave = trackChange;
-
-// ---------- تطبيق ناتج الدمج مرة أخرى داخل db الحيّة وإعادة الرسم ----------
-function applyMergedIntoApp(mergedVal, mergedMeta) {
-  const app = window.__app, db = app.db;
-  for (const b of BUCKETS) if (b !== 'rosterOrder') db[b] = mergedVal[b] || {};
-  const studentsArr = Object.values(mergedVal.students || {});
-  db.students = studentsArr;
-  const orderMap = mergedVal.rosterOrder || {};
-  for (const st of db.students) {
-    const rec = st.studentUid ? orderMap[st.studentUid] : null;
-    if (rec && rec.section === (st.section || (db.sections && db.sections[0]) || '')) st.rosterOrder = rec.order;
-  }
-  // مهم: واجهات التطبيق تعتمد أيضًا على ترتيب db.students نفسه، لا على rosterOrder وحده.
-  // لذلك نعيد ترتيب المصفوفة فعليًا بعد الدمج، مع إبقاء نسخ الطالب في مواده متجاورة
-  // وبالترتيب المعتمد نفسه داخل كل شعبة.
-  const subjectRank = { quran: 0, islamic: 1, tajweed: 2, life: 3, lifeskills: 3, 'life-skills': 3 };
-  db.students.sort((a, b) => {
-    const secA = a.section || (db.sections && db.sections[0]) || '';
-    const secB = b.section || (db.sections && db.sections[0]) || '';
-    if (secA !== secB) return String(secA).localeCompare(String(secB), 'ar');
-    const ra = a.studentUid && orderMap[a.studentUid] && orderMap[a.studentUid].section === secA ? Number(orderMap[a.studentUid].order) : Number(a.rosterOrder);
-    const rb = b.studentUid && orderMap[b.studentUid] && orderMap[b.studentUid].section === secB ? Number(orderMap[b.studentUid].order) : Number(b.rosterOrder);
-    const oa = Number.isFinite(ra) ? ra : 999999;
-    const ob = Number.isFinite(rb) ? rb : 999999;
-    if (oa !== ob) return oa - ob;
-    if ((a.studentUid || '') !== (b.studentUid || '')) return String(a.name || '').localeCompare(String(b.name || ''), 'ar');
-    return (subjectRank[a.subject || 'quran'] ?? 99) - (subjectRank[b.subject || 'quran'] ?? 99);
-  });
-  app.save();
-  saveJSON(META_KEY, mergedMeta);
-  saveJSON(SNAP_KEY, snapshotOf(db));
-  app.render();
-}
-
-// ---------- المزامنة الثنائية الاتجاه بين الأجهزة (المعلم فقط) ----------
-// ---------- أداة إنقاذ: فرض رفع بيانات هذا الجهاز بالكامل، متجاوزةً الدمج تمامًا ----------
-// تُستخدم فقط عند التأكد أن بيانات هذا الجهاز صحيحة وأن السحابة تحمل نسخة خاطئة/قديمة.
-async function forceUploadLocal(statusEl) {
-  if (!confirm('سيتم استبدال كل ما في السحابة ببيانات هذا الجهاز فقط، دون أي دمج مع أي جهاز آخر. تأكد أن بيانات هذا الجهاز هي الصحيحة فعلاً. متابعة؟')) return;
-  statusEl.textContent = 'جارٍ التجهيز...';
-  const db = window.__app.db;
-  const stamp = Date.now();
-  const snap = snapshotOf(db);
-  const forcedMeta = emptyMeta();
-  for (const b of BUCKETS) for (const k of Object.keys(snap[b] || {})) forcedMeta[b][k] = { t: stamp, deleted: false };
-  for (const k of Object.keys(snap.students || {})) forcedMeta.students[k] = { t: stamp, deleted: false };
-  statusEl.textContent = 'جارٍ الرفع القسري...';
-  const { error } = await supa.from('gradebook_state').upsert({ id: 'main', db: snap, meta: forcedMeta, updated_at: new Date().toISOString() });
-  if (error) { statusEl.textContent = 'خطأ في الرفع: ' + error.message; return; }
-  saveJSON(META_KEY, forcedMeta);
-  saveJSON(SNAP_KEY, snap);
-  statusEl.textContent = 'تم فرض رفع بيانات هذا الجهاز بنجاح. زامن بقية الأجهزة الآن لتحديثها.';
-}
-
-async function withTimeout(promise, ms, label) {
-  let timer;
-  try {
-    return await Promise.race([promise,new Promise((_, reject) => {
-      timer=setTimeout(()=>reject(new Error(label+' تجاوز المهلة المحددة. تحقق من الاتصال ثم أعد المحاولة.')),ms);
-    })]);
-  } finally { if(timer) clearTimeout(timer); }
-}
-const SYNC_DIAG_KEYS = [
-  '0|0|4|0|mukrazc2-qoubmly5ti8',
-  '0|0|4|4|mukrazc2-qoubmly5ti8'
-];
-function diagPick(val, meta, k) {
-  return {
-    hasValue: !!(val && Object.prototype.hasOwnProperty.call(val, k)),
-    value: val && Object.prototype.hasOwnProperty.call(val, k) ? val[k] : null,
-    meta: meta && Object.prototype.hasOwnProperty.call(meta, k) ? meta[k] : null
-  };
-}
-
-function syncStableJson(v) {
-  if (v === undefined) return '__UNDEFINED__';
-  if (v === null || typeof v !== 'object') return JSON.stringify(v);
-  if (Array.isArray(v)) return '[' + v.map(syncStableJson).join(',') + ']';
-  return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + syncStableJson(v[k])).join(',') + '}';
-}
-function syncValueEqual(a,b){ return syncStableJson(a)===syncStableJson(b); }
-function syncBucketDiff(sentVal,sentMeta,savedVal,savedMeta,limit=25){
-  const sv=sentVal||{},sm=sentMeta||{},rv=savedVal||{},rm=savedMeta||{};
-  const keys=[...new Set([...Object.keys(sv),...Object.keys(sm),...Object.keys(rv),...Object.keys(rm)])].sort();
-  const samples=[]; let total=0;
-  for(const k of keys){
-    const shv=Object.prototype.hasOwnProperty.call(sv,k), rhv=Object.prototype.hasOwnProperty.call(rv,k);
-    const shm=Object.prototype.hasOwnProperty.call(sm,k), rhm=Object.prototype.hasOwnProperty.call(rm,k);
-    const valueEqual=shv===rhv&&(!shv||syncValueEqual(sv[k],rv[k]));
-    const metaEqual=shm===rhm&&(!shm||syncValueEqual(sm[k],rm[k]));
-    if(!valueEqual||!metaEqual){
-      total++;
-      if(samples.length<limit) samples.push({key:k,sent:diagPick(sv,sm,k),saved:diagPick(rv,rm,k),valueEqual,metaEqual});
-    }
-  }
-  return {sentValues:Object.keys(sv).length,savedValues:Object.keys(rv).length,sentMeta:Object.keys(sm).length,savedMeta:Object.keys(rm).length,diffCount:total,samples};
-}
-function buildFullSyncDiffReport(sentDb,sentMeta,savedDb,savedMeta,buildName){
-  const report={build:buildName,at:new Date().toISOString(),totalDiffs:0,buckets:{}};
-  for(const b of [...BUCKETS,'students']){
-    const d=syncBucketDiff(sentDb?.[b]||{},sentMeta?.[b]||{},savedDb?.[b]||{},savedMeta?.[b]||{});
-    report.buckets[b]=d; report.totalDiffs+=d.diffCount;
-  }
-  return report;
-}
-
-async function runSyncDiagnostic(statusEl, outEl) {
-  const btn=document.getElementById('paSyncDiagnostic');
-  if(btn) btn.disabled=true;
-  try {
-    statusEl.textContent='جارٍ الفحص الشامل فقط دون رفع أي بيانات...';
-    const db=window.__app.db;
-    const localMeta=loadJSON(META_KEY,emptyMeta());
-    for(const b of [...BUCKETS,'students']) if(!localMeta[b]) localMeta[b]={};
-    const localSnap=snapshotOf(db);
-    const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'جلب بيانات الفحص');
-    const {data,error}=fetchResult||{};
-    if(error) throw new Error('خطأ في الجلب: '+error.message);
-    const remoteSnap=(data&&data.db)||{},remoteMeta=(data&&data.meta)||emptyMeta();
-    for(const b of [...BUCKETS,'students']) if(!remoteMeta[b]) remoteMeta[b]={};
-    const mergedVal={},mergedMeta={};
-    for(const b of [...BUCKETS,'students']){
-      const r=mergeBucket(localSnap[b],localMeta[b],remoteSnap[b],remoteMeta[b]);
-      mergedVal[b]=r.val; mergedMeta[b]=r.meta;
-    }
-    const report=buildFullSyncDiffReport(mergedVal,mergedMeta,remoteSnap,remoteMeta,'DIAG-FULL-2026-10-03-B');
-    report.remote_updated_at=(data&&data.updated_at)||null;
-    report.keys={};
-    for(const k of SYNC_DIAG_KEYS) report.keys[k]={local:diagPick(localSnap.grades||{},localMeta.grades||{},k),remote:diagPick(remoteSnap.grades||{},remoteMeta.grades||{},k),merged:diagPick(mergedVal.grades||{},mergedMeta.grades||{},k)};
-    saveJSON('quran-sync-debug-v1',report);
-    if(outEl) outEl.textContent=JSON.stringify(report,null,2);
-    statusEl.textContent='اكتمل الفحص الشامل دون رفع أو تغيير أي بيانات.';
-  } catch(err) {
-    statusEl.textContent='تعذر الفحص: '+(err&&err.message?err.message:String(err));
-  } finally { if(btn) btn.disabled=false; }
-}
-
-async function syncDevices(statusEl) {
-  const button=document.getElementById('paSyncDevices');
-  if(button) button.disabled=true;
-  try {
-    statusEl.textContent='جارٍ جلب حالة الخادم...'; saveSyncStatus(statusEl.textContent,'working');
-    const db=window.__app.db;
-    const hadPreviousSnapshot=!!loadJSON(SNAP_KEY,null);
-
-    // مهم جدًا: لا نستدعِ trackChange() هنا.
-    // التغييرات الحقيقية تُسجَّل وقت app.save() عبر window.__onSave.
-    // استدعاء trackChange عند بدء المزامنة كان يجعل جهازًا قديمًا يمنح بياناته
-    // طابعًا زمنيًا جديدًا، فتفوز خطأً على نسخة السحابة الأحدث.
-    let localMeta=loadJSON(META_KEY,emptyMeta());
-    for(const b of [...BUCKETS,'students']) if(!localMeta[b]) localMeta[b]={};
-    const localSnap=snapshotOf(db);
-
-    const fetchResult=await withTimeout(supa.from('gradebook_state').select('*').eq('id','main').maybeSingle(),20000,'جلب بيانات المزامنة');
-    const {data,error}=fetchResult||{};
-    if(error) throw new Error('خطأ في الجلب: '+error.message);
-    const remoteSnap=(data&&data.db)||{};
-    const remoteMeta=(data&&data.meta)||emptyMeta();
-    for(const b of [...BUCKETS,'students']) if(!remoteMeta[b]) remoteMeta[b]={};
-
-    const remoteHasData=[...BUCKETS,'students'].some(b=>remoteSnap[b]&&Object.keys(remoteSnap[b]).length);
-    if(!hadPreviousSnapshot&&!remoteHasData){
-      const seeded=emptyMeta(),stamp=Date.now();
-      for(const b of BUCKETS) for(const k of Object.keys(localSnap[b]||{})) seeded[b][k]={t:stamp,deleted:false};
-      for(const k of Object.keys(localSnap.students||{})) seeded.students[k]={t:stamp,deleted:false};
-      localMeta=seeded; saveJSON(META_KEY,localMeta);
-    }
-
-    const mergedVal={},mergedMeta={};
-    for(const b of [...BUCKETS,'students']){
-      const r=mergeBucket(localSnap[b],localMeta[b],remoteSnap[b],remoteMeta[b]);
-      mergedVal[b]=r.val; mergedMeta[b]=r.meta;
-    }
-
-    statusEl.textContent='جارٍ رفع النتيجة المدمجة...'; saveSyncStatus(statusEl.textContent,'working');
-    const upResult=await withTimeout(
-      supa.from('gradebook_state').upsert({id:'main',db:mergedVal,meta:mergedMeta,updated_at:new Date().toISOString()}).select('id,updated_at').maybeSingle(),
-      20000,'رفع بيانات المزامنة'
-    );
-    const {data:savedRow,error:upErr}=upResult||{};
-    if(upErr) throw new Error('خطأ في الرفع: '+upErr.message);
-    if(!savedRow||savedRow.id!=='main') throw new Error('لم يؤكد الخادم حفظ سجل المزامنة.');
-
-    // تحقق تشخيصي كامل بعد الرفع: لا نكتفي بوجود السجل، بل نعيد قراءة db/meta
-    // ونقارن المفاتيح التشخيصية بما حاولنا رفعه. لا يغيّر هذا أي بيانات.
-    statusEl.textContent='جارٍ التحقق من البيانات المحفوظة...'; saveSyncStatus(statusEl.textContent,'working');
-    const verifyResult=await withTimeout(
-      supa.from('gradebook_state').select('id,db,meta,updated_at').eq('id','main').maybeSingle(),
-      15000,'التحقق من حفظ المزامنة'
-    );
-    const {data:verified,error:verifyErr}=verifyResult||{};
-    if(verifyErr) throw new Error('خطأ في التحقق: '+verifyErr.message);
-    if(!verified||verified.id!=='main') throw new Error('لم يمكن التحقق من حفظ بيانات المزامنة في السحابة.');
-
-    const verifyReport=buildFullSyncDiffReport(
-      mergedVal,mergedMeta,verified.db||{},verified.meta||{},'VERIFY-FULL-2026-10-03-B'
-    );
-    verifyReport.updated_at=verified.updated_at||null;
-    verifyReport.keys={};
-    for(const k of SYNC_DIAG_KEYS) verifyReport.keys[k]={sent:diagPick(mergedVal.grades||{},mergedMeta.grades||{},k),saved:diagPick(verified.db?.grades||{},verified.meta?.grades||{},k)};
-    saveJSON('quran-sync-upload-verify-v1',verifyReport);
-    console.log('SYNC UPLOAD VERIFY',verifyReport);
-    if(verifyReport.totalDiffs>0){
-      const badBuckets=Object.entries(verifyReport.buckets).filter(([,v])=>v.diffCount>0).map(([k,v])=>k+'='+v.diffCount).join('، ');
-      throw new Error('الخادم أكد الطلب، لكن توجد فروق فعلية بعد الحفظ ('+badBuckets+'). افتح فحص المزامنة دون رفع وأرسل التقرير.');
-    }
-
-    // نطبّق الدمج أولًا؛ applyMergedIntoApp يحفظ snapshot/meta المطابقين للناتج.
-    applyMergedIntoApp(mergedVal,mergedMeta);
-    const successRec=saveSyncStatus('تمت المزامنة بنجاح بين الأجهزة.','success');
-    statusEl.textContent=successRec.message;
-    setTimeout(async()=>{
-      try{
-        if(document.getElementById('syncDevicesBody')) await renderCloudTab('syncDevices');
-      }catch(_){}
-      const current=document.getElementById('paSyncStatus');
-      if(current) paintSyncStatus(current,successRec);
-    },0);
-  } catch(err) {
-    console.error('Device sync failed:',err);
-    const failRec=saveSyncStatus('تعذرت المزامنة: '+(err&&err.message?err.message:String(err)),'error');
-    statusEl.textContent=failRec.message;
-  } finally { if(button) button.disabled=false; }
-}
-
 // ---------- بناء تقرير طالب واحد لعرضه لولي الأمر ----------
 function buildReport(studentUid, name, section, t) {
   const app=window.__app;
@@ -361,10 +55,12 @@ async function syncReports(root,students) {
   let done=0;
   for(const st of students){
     const report=buildReport(st.key,st.name,st.section,sem);
+    const portalEnabled=window.__app?.db?.studentSupport?.[st.key]?.portalEnabled!==false;
     const {error}=await supa.from('students_public').upsert({
       id:st.key,
       full_name:st.name,
-      report:report
+      report:report,
+      portal_enabled:portalEnabled
     },{onConflict:'id'});
     if(error){
       status.textContent=`توقفت المزامنة عند ${st.name}: ${error.message}`;
@@ -388,91 +84,579 @@ async function loginBox(root, returnTab) {
     if(error){status.textContent='خطأ: '+error.message;return;} await renderCloudTab(returnTab);
   };
 }
-const SYNC_STATUS_KEY='quran-device-sync-status-v1';
-function saveSyncStatus(message, kind='info'){
-  const rec={message:String(message||''),kind,at:new Date().toISOString()};
-  try{localStorage.setItem(SYNC_STATUS_KEY,JSON.stringify(rec));}catch(_){}
-  return rec;
+
+// ============================================================
+// النقل الكامل الآمن بين الأجهزة — الإصدار 2
+// ------------------------------------------------------------
+// المبادئ:
+// • يُنقل كائن قاعدة البيانات كاملًا بكل حقوله كما هو (لا دمج، لا اختيار حقول).
+// • يُكتب إلى صف جديد مستقل في Supabase (full-v2)، ولا يُقرأ الصف القديم main إلا للنسخ الاحتياطي.
+// • كل نقل يسبقه: محاكاة لا تكتب شيئًا ← نسخة احتياطية ← كتابة ← قراءة عكسية ومقارنة شاملة لكل حقل وقيمة.
+// • حذف اختبارات الدراسات الإسلامية القديمة يحدث مرة واحدة فقط في أول نقل، وتُسجَّل علامة دائمة داخل البيانات
+//   (db.syncMarks.islamicTestsReset) حتى لا يتكرر الحذف أبدًا على الدرجات الجديدة.
+// • يُمنع أي جهاز لا يحمل هذه العلامة من الرفع بعد وجود النسخة الكاملة في السحابة (يمنع عودة الاختبارات القديمة).
+// ============================================================
+const APP_STORAGE_KEY = 'quran-offline-v1';
+const FULL_ROW_ID = 'full-v2';
+const FULL_FORMAT = 'quran-gradebook-full-v2';
+const FS_BASE_KEY = 'quran-fullsync-base-v2';      // بصمة آخر نسخة تطابق فيها هذا الجهاز مع السحابة
+const FS_PENDING_KEY = 'quran-fullsync-pending-v2'; // تحقق ينتظر إعادة التحميل
+const FS_IDB_NAME = 'quran-fullsync-v2';
+const FS_UI_FIELDS = ['activeSection', 'activeSubject', 'view', 'lastBackupAt']; // تُنقل، لكنها لا تُعدّ «تعديلًا على البيانات»
+const FS_LS_WARN_CHARS = 2000000;
+
+const fsSim = { up: null, down: null };
+
+function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } }
+function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (_) { return false; } }
+function fsClone(x) { return JSON.parse(JSON.stringify(x)); }
+function fsType(x) { return x === null ? 'null' : Array.isArray(x) ? 'array' : typeof x; }
+function fsOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+
+// تسلسل ثابت الترتيب (مفاتيح مرتبة) حتى لا تتأثر البصمة بإعادة ترتيب Supabase للمفاتيح
+function fsCanon(x) {
+  if (x === null || typeof x !== 'object') return JSON.stringify(x) ?? 'null';
+  if (Array.isArray(x)) return '[' + x.map(v => (v === undefined ? 'null' : fsCanon(v))).join(',') + ']';
+  return '{' + Object.keys(x).sort().filter(k => x[k] !== undefined).map(k => JSON.stringify(k) + ':' + fsCanon(x[k])).join(',') + '}';
 }
-function loadSyncStatus(){
-  try{return JSON.parse(localStorage.getItem(SYNC_STATUS_KEY)||'null');}catch(_){return null;}
+function fsCyrb(str, seed) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) { ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507); h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507); h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
 }
-function paintSyncStatus(el,rec){
-  if(!el||!rec)return;
-  const when=rec.at?new Date(rec.at).toLocaleString('ar-SA'):'';
-  el.textContent=rec.message+(when?' — '+when:'');
-  el.style.display='inline-block';
-  el.style.marginInlineStart='8px';
-  el.style.fontWeight='700';
-  el.style.border='1px solid #cbd8d2';
-  el.style.background=rec.kind==='success'?'#eef8f2':rec.kind==='error'?'#fff2f2':'#f7f8f7';
-}
-async function adoptThisDeviceRosterOrder(statusEl){
-  try{
-    const app=window.__app, counters={};
-    // نعتمد ترتيب القائمة الظاهر فعليًا في هذا الجهاز، لا قيمة قديمة محفوظة في rosterOrder.
-    for(const st of app.db.students){
-      if((st.subject || 'quran') !== 'quran' || !st.studentUid) continue;
-      const sec=st.section || (app.db.sections && app.db.sections[0]) || '';
-      const n=counters[sec] || 0;
-      st.rosterOrder=n;
-      counters[sec]=n+1;
-      // نفس ترتيب الطالب لجميع نسخه في المواد.
-      for(const copy of app.db.students){
-        if(copy.studentUid===st.studentUid && (copy.section || (app.db.sections && app.db.sections[0]) || '')===sec) copy.rosterOrder=n;
-      }
+function fsFp(obj) { const s = fsCanon(obj); return fsCyrb(s, 1) + fsCyrb(s, 7) + '-' + s.length; }
+function fsContentFp(db) { const c = fsClone(db); for (const f of FS_UI_FIELDS) delete c[f]; return fsFp(c); }
+
+// مقارنة شاملة: كل حقل وكل قيمة في كل مستوى، وليس عدد السجلات فقط
+function fsDeepDiff(a, b, limit = 200) {
+  const out = { count: 0, paths: [] };
+  const add = (p, kind) => { out.count++; if (out.paths.length < limit) out.paths.push(kind + ': ' + (p || '(الجذر)')); };
+  const walk = (x, y, p) => {
+    if (x === y) return;
+    const tx = fsType(x), ty = fsType(y);
+    if (tx !== ty) { add(p, 'نوع مختلف'); return; }
+    if (tx === 'array') {
+      if (x.length !== y.length) add(p, 'طول مختلف ' + x.length + '≠' + y.length);
+      for (let i = 0; i < Math.min(x.length, y.length); i++) walk(x[i], y[i], p + '[' + i + ']');
+      return;
     }
-    const snap=snapshotOf(app.db);
-    const meta=loadJSON(META_KEY,emptyMeta());
-    if(!meta.rosterOrder) meta.rosterOrder={};
-    const stamp=Date.now();
-    for(const uid of Object.keys(snap.rosterOrder||{})) meta.rosterOrder[uid]={t:stamp,deleted:false};
-    saveJSON(META_KEY,meta);
-    saveJSON(SNAP_KEY,snap);
-    app.save();
-    const rec=saveSyncStatus('تم اعتماد ترتيب الطلاب الظاهر في هذا الجهاز. جارٍ رفعه للسحابة...','working');
-    statusEl.textContent=rec.message;
-    await syncDevices(statusEl);
-  }catch(err){
-    const rec=saveSyncStatus('تعذر اعتماد ترتيب هذا الجهاز: '+(err&&err.message?err.message:String(err)),'error');
-    statusEl.textContent=rec.message;
+    if (tx === 'object') {
+      for (const k of Object.keys(x)) { if (!fsOwn(y, k)) add(p + '.' + k, 'مفقود'); else walk(x[k], y[k], p + '.' + k); }
+      for (const k of Object.keys(y)) if (!fsOwn(x, k)) add(p + '.' + k, 'زائد');
+      return;
+    }
+    if (tx === 'number' && Number.isNaN(x) && Number.isNaN(y)) return;
+    add(p, 'قيمة مختلفة');
+  };
+  walk(a, b, '');
+  return out;
+}
+
+// نسخة مطابقة لدالة valid() في index.html؛ إن فشلت عند فتح التطبيق فسيبدأ ببيانات فارغة، لذلك نمنع الكتابة مسبقًا.
+function fsValidDb(x) {
+  return !!(x && x.version === 1 && Array.isArray(x.students) && x.students.every(s => typeof s.id === 'string' && typeof s.name === 'string') &&
+    x.grades && typeof x.grades === 'object' && x.absences && typeof x.absences === 'object' && x.tests && typeof x.tests === 'object' &&
+    x.actual && x.view && [0, 1].includes(x.actual.t) && [0, 1].includes(x.actual.p) && Number.isInteger(x.actual.w) && x.actual.w >= 0 && x.actual.w <= 6 &&
+    Number.isInteger(x.actual.d) && x.actual.d >= 0 && x.actual.d <= 4 && [0, 1].includes(x.view.t) && [0, 1].includes(x.view.p) &&
+    Number.isInteger(x.view.w) && x.view.w >= 0 && x.view.w <= 6);
+}
+
+// مفتاح درجة اختبار دراسات إسلامية: islamic|t|p|studentId|tests|i (أو نجمته star|islamic|...|tests|i)
+function fsIsIslamicTestKey(k) {
+  let p = String(k).split('|');
+  if (p[0] === 'star') p = p.slice(1);
+  return p[0] === 'islamic' && p[4] === 'tests';
+}
+function fsIslamicTestCount(db) { return Object.keys(db?.coursework || {}).filter(fsIsIslamicTestKey).length; }
+function fsCourseBreakdown(cw) {
+  const m = {};
+  for (const k of Object.keys(cw || {})) {
+    let p = k.split('|'), star = false;
+    if (p[0] === 'star') { star = true; p = p.slice(1); }
+    const label = (p[0] || '?') + '|' + (p[4] || '?') + (star ? '|star' : '');
+    m[label] = (m[label] || 0) + 1;
+  }
+  return m;
+}
+function fsBreakdownLabel(label) {
+  const [subj, cat, star] = label.split('|');
+  const app = window.__app || {};
+  const sName = (app.subjectNames && app.subjectNames[subj]) || subj;
+  const def = (app.courseDefs && app.courseDefs[subj] || []).find(d => d.id === cat);
+  return sName + ' — ' + (def ? def.name : cat) + (star ? ' (نجوم)' : '');
+}
+const FS_FIELD_LABELS = {
+  version: 'إصدار البيانات', students: 'سجلات الطلاب', grades: 'درجات القرآن', absences: 'الغياب', tests: 'اختبارات القرآن',
+  holidays: 'الإجازات', approvals: 'الاعتمادات', actual: 'الموعد الفعلي', view: 'الكشف المعروض', max: 'الدرجة العظمى',
+  sections: 'الشعب', activeSection: 'الشعبة النشطة', activeSubject: 'المادة النشطة', coursework: 'درجات المواد',
+  quranShare: 'نصيب القرآن', auditLog: 'سجل التعديلات', archives: 'الأرشيف', lastBackupAt: 'آخر نسخة احتياطية',
+  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة'
+};
+function fsSize(v) { const t = fsType(v); return t === 'array' ? v.length : t === 'object' ? Object.keys(v).length : t === 'undefined' ? '—' : 'قيمة'; }
+
+// ---------- قراءة بيانات هذا الجهاز والتأكد من أن المحفوظ = المعروض ----------
+function fsReadStoredDb() {
+  const raw = localStorage.getItem(APP_STORAGE_KEY);
+  if (!raw) return null;
+  return JSON.parse(raw);
+}
+function fsSourceDb() {
+  const stored = fsReadStoredDb();
+  if (!stored) throw new Error('لا توجد بيانات محفوظة على هذا الجهاز.');
+  const mem = fsClone(window.__app.db);
+  const d = fsDeepDiff(stored, mem, 10);
+  return { stored, memMatches: d.count === 0, memDiff: d };
+}
+
+// ---------- بناء حزمة النقل ----------
+function fsBuildPayload(src, nowIso) {
+  const payload = fsClone(src);
+  const firstTransfer = !(src.syncMarks && src.syncMarks.islamicTestsReset);
+  const removed = [];
+  if (firstTransfer) {
+    for (const k of Object.keys(payload.coursework || {})) if (fsIsIslamicTestKey(k)) { removed.push(k); delete payload.coursework[k]; }
+    payload.syncMarks = Object.assign({}, payload.syncMarks || {}, { islamicTestsReset: { at: nowIso, removed: removed.length } });
+    const uidFn = () => (crypto.randomUUID ? crypto.randomUUID() : 'uid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
+    payload.auditLog = [{ id: uidFn(), at: nowIso, type: 'sync-reset', text: 'النقل الكامل الآمن: حُذفت درجات اختبارات الدراسات الإسلامية القديمة (' + removed.length + ' خانة) مرة واحدة، وبقيت بقية البيانات كما هي.', studentUid: '' }, ...(Array.isArray(payload.auditLog) ? payload.auditLog : [])];
+  }
+  return { payload, firstTransfer, removed };
+}
+
+// ---------- فحوص السلامة للحزمة قبل أي كتابة ----------
+function fsVerifyPayload(src, plan, check) {
+  const { payload, firstTransfer, removed } = plan;
+  check(fsValidDb(src), 'بنية بيانات هذا الجهاز صالحة');
+  check(Array.isArray(src.students) && src.students.length > 0, 'بيانات هذا الجهاز غير فارغة', (src.students || []).length + ' سجل طالب');
+  check(fsValidDb(payload), 'بنية حزمة النقل صالحة ويقبلها التطبيق عند الفتح');
+  const missingTop = Object.keys(src).filter(k => !fsOwn(payload, k));
+  check(missingTop.length === 0, 'جميع حقول قاعدة البيانات العليا موجودة في الحزمة', missingTop.length ? 'مفقود: ' + missingTop.join('، ') : Object.keys(src).length + ' حقلًا');
+
+  // المقارنة الشاملة: نبني «النتيجة المتوقعة» من بيانات الجهاز ونطابقها مع الحزمة قيمةً بقيمة
+  const expected = fsClone(src);
+  if (firstTransfer) {
+    for (const k of removed) delete expected.coursework[k];
+    expected.syncMarks = fsClone(payload.syncMarks);
+    expected.auditLog = [fsClone(payload.auditLog[0]), ...(Array.isArray(src.auditLog) ? src.auditLog : [])];
+  }
+  const d = fsDeepDiff(expected, payload);
+  check(d.count === 0, 'مقارنة شاملة لكل الحقول والقيم: لا فرق سوى المسموح به', d.count ? d.count + ' فرق غير متوقع' : (firstTransfer ? 'الفرق الوحيد: ' + removed.length + ' خانة اختبار إسلامية + علامة الإصلاح + قيد في سجل التعديلات' : 'مطابقة تامة'), d.paths);
+  check(removed.every(fsIsIslamicTestKey), 'كل ما حُذف هو اختبارات دراسات إسلامية فقط', removed.length + ' خانة');
+  if (firstTransfer) check(fsIslamicTestCount(payload) === 0, 'عمودا اختبارَي الدراسات الإسلامية فارغان في الحزمة');
+
+  const bs = fsCourseBreakdown(src.coursework), bp = fsCourseBreakdown(payload.coursework);
+  const changedCats = [...new Set([...Object.keys(bs), ...Object.keys(bp)])].filter(l => {
+    if ((bs[l] || 0) === (bp[l] || 0)) return false;
+    const [subj, cat] = l.split('|');
+    return !(firstTransfer && subj === 'islamic' && cat === 'tests');
+  });
+  check(changedCats.length === 0, 'بقية خانات المواد (المشاركة والواجبات والتفاعل والتجويد والمهارات...) لم تتغير', changedCats.length ? changedCats.map(fsBreakdownLabel).join('، ') : '');
+  for (const f of ['students', 'grades', 'absences', 'tests', 'approvals', 'holidays', 'studentSupport', 'sections', 'archives', 'actual', 'view', 'quranShare', 'max'])
+    if (fsOwn(src, f)) check(fsDeepDiff(src[f], payload[f], 1).count === 0, 'مطابقة تامة: ' + (FS_FIELD_LABELS[f] || f), fsSize(src[f]) + '');
+
+  const rt = JSON.parse(JSON.stringify(payload));
+  check(fsDeepDiff(payload, rt, 5).count === 0, 'التحويل إلى JSON والعودة دون فقد أي قيمة');
+  check(fsValidDb(rt) && fsFp(rt) === fsFp(payload), 'محاكاة الاستقبال: الحزمة بعد فكّها صالحة وبصمتها مطابقة');
+  const size = JSON.stringify(payload).length;
+  check(true, 'حجم البيانات', Math.round(size / 1024) + ' ك.ب' + (size > FS_LS_WARN_CHARS ? ' — كبير نسبيًا على الآيباد' : ''));
+  return { expectedDiff: d, breakdownBefore: bs, breakdownAfter: bp, size };
+}
+
+// ---------- Supabase (قراءة) ----------
+async function fsFetchRow(id, cols = '*') {
+  const { data, error } = await supa.from('gradebook_state').select(cols).eq('id', id).maybeSingle();
+  if (error) throw new Error('تعذّرت قراءة السحابة: ' + error.message);
+  return data || null;
+}
+
+// ---------- النسخ الاحتياطي (ملف يُنزَّل + نسخة داخل المتصفح IndexedDB) ----------
+function fsDownload(obj, prefix) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = prefix + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function fsIdbOpen() {
+  return new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error('IndexedDB غير متاح'));
+    const r = indexedDB.open(FS_IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function fsIdb(mode, fn) {
+  const d = await fsIdbOpen();
+  return new Promise((res, rej) => {
+    const tx = d.transaction('items', mode), st = tx.objectStore('items'); let out;
+    const req = fn(st); if (req) req.onsuccess = () => { out = req.result; };
+    tx.oncomplete = () => { d.close(); res(out); };
+    tx.onerror = tx.onabort = () => { d.close(); rej(tx.error || new Error('فشل IndexedDB')); };
+  });
+}
+const fsIdbPut = item => fsIdb('readwrite', st => st.put(item));
+const fsIdbGet = id => fsIdb('readonly', st => st.get(id));
+const fsIdbAll = () => fsIdb('readonly', st => st.getAll());
+const fsIdbDel = id => fsIdb('readwrite', st => st.delete(id));
+async function fsListBackups() {
+  try { return ((await fsIdbAll()) || []).filter(x => x.kind === 'backup').sort((a, b) => b.at.localeCompare(a.at)); } catch (_) { return []; }
+}
+async function fsMakeBackup(reason, cloudRows) {
+  const localDb = fsReadStoredDb();
+  if (!localDb) throw new Error('لا توجد بيانات محلية لنسخها.');
+  const at = new Date().toISOString(), id = 'backup-' + Date.now();
+  const item = { id, kind: 'backup', at, reason, fp: fsFp(localDb), localDb, cloudRows: cloudRows || null };
+  fsDownload({ exportKind: 'quran_full_backup_v2', reason, at, localDb, cloudRows: cloudRows || null }, 'نسخة-احتياطية-قبل-' + reason);
+  let idbOk = false;
+  try {
+    await fsIdbPut(item);
+    const back = await fsIdbGet(id);
+    idbOk = !!back && fsFp(back.localDb) === item.fp;
+    const all = await fsListBackups();
+    for (const old of all.slice(8)) await fsIdbDel(old.id);
+  } catch (_) { idbOk = false; }
+  if (!idbOk && !confirm('تعذّر حفظ النسخة الاحتياطية داخل المتصفح. هل ظهر ملف النسخة الاحتياطية في التنزيلات وتأكدت من وجوده؟\n(اضغط «إلغاء» لإيقاف العملية دون أي تغيير)'))
+    throw new Error('أُوقفت العملية لعدم التأكد من النسخة الاحتياطية. لم يتغير شيء.');
+  return { id, idbOk };
+}
+
+// ---------- استبدال بيانات هذا الجهاز ثم التحقق بعد إعادة التحميل ----------
+async function fsReplaceLocal(newDb, kind, backupId) {
+  if (!fsValidDb(newDb)) throw new Error('البيانات الجديدة لا يقبلها التطبيق؛ أُلغي الاستبدال.');
+  const prevRaw = localStorage.getItem(APP_STORAGE_KEY);
+  const expectedFp = fsFp(newDb), contentFp = fsContentFp(newDb);
+  try { await fsIdbPut({ id: 'expected-pending', kind: 'expected', at: new Date().toISOString(), data: newDb }); } catch (_) {}
+  try {
+    localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(newDb));
+    const back = fsReadStoredDb();
+    const d = fsDeepDiff(newDb, back, 5);
+    if (d.count || !fsValidDb(back)) throw new Error('القراءة العكسية من ذاكرة الجهاز غير مطابقة (' + d.count + ' فرق).');
+  } catch (err) {
+    try { if (prevRaw !== null) localStorage.setItem(APP_STORAGE_KEY, prevRaw); } catch (_) {}
+    throw new Error('تعذّر حفظ البيانات على هذا الجهاز، وأُعيدت البيانات السابقة كما كانت: ' + err.message);
+  }
+  saveJSON(FS_PENDING_KEY, { kind, expectedFp, contentFp, backupId: backupId || null, at: new Date().toISOString() });
+  const cover = document.createElement('div');
+  cover.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,.94);z-index:99999;display:flex;align-items:center;justify-content:center;font:20px Tahoma;color:#205348';
+  cover.textContent = 'جارٍ إعادة تحميل التطبيق للتحقق النهائي...';
+  document.body.appendChild(cover);
+  setTimeout(() => location.reload(), 400);
+}
+
+function fsBanner(html, ok) {
+  const old = document.getElementById('fsBanner'); if (old) old.remove();
+  const b = document.createElement('div'); b.id = 'fsBanner';
+  b.style.cssText = 'margin:10px 0;padding:12px 14px;border-radius:10px;border:2px solid ' + (ok ? '#2e7d4f;background:#e9f6ee' : '#b42318;background:#fdecea') + ';color:#193d34';
+  b.innerHTML = html;
+  const close = document.createElement('button'); close.type = 'button'; close.textContent = 'إخفاء'; close.onclick = () => b.remove();
+  b.appendChild(close);
+  const header = document.querySelector('header');
+  if (header && header.parentNode) header.parentNode.insertBefore(b, header.nextSibling); else document.body.prepend(b);
+  return b;
+}
+
+async function fsPostReloadCheck() {
+  const pend = loadJSON(FS_PENDING_KEY, null);
+  if (!pend) return;
+  let stored = null, memOk = false;
+  try { stored = fsReadStoredDb(); memOk = fsDeepDiff(stored, fsClone(window.__app.db), 1).count === 0; } catch (_) {}
+  const fpNow = stored ? fsFp(stored) : '';
+  const kindText = { upload: 'الرفع الأول من هذا الجهاز', receive: 'الاستقبال من السحابة', restore: 'استعادة النسخة الاحتياطية' }[pend.kind] || pend.kind;
+  if (stored && memOk && fpNow === pend.expectedFp) {
+    if (pend.kind !== 'restore') saveJSON(FS_BASE_KEY, { contentFp: pend.contentFp, fp: pend.expectedFp, at: new Date().toISOString(), kind: pend.kind });
+    localStorage.removeItem(FS_PENDING_KEY);
+    try { await fsIdbDel('expected-pending'); } catch (_) {}
+    fsBanner('<b>✓ نجح التحقق النهائي بعد إعادة التحميل (' + escapeHtml(kindText) + ').</b><br>بيانات التطبيق الآن مطابقة حقلًا بحقل وقيمةً بقيمة للنسخة المعتمدة. (' + (stored.students || []).length + ' سجل طالب)', true);
+    return;
+  }
+  let detail = '';
+  try {
+    const exp = await fsIdbGet('expected-pending');
+    if (exp && stored) { const d = fsDeepDiff(exp.data, stored, 15); detail = '<br>عدد الفروق: ' + d.count + '<br><small>' + d.paths.map(escapeHtml).join('<br>') + '</small>'; }
+  } catch (_) {}
+  const b = fsBanner('<b>✗ التحقق النهائي بعد إعادة التحميل لم يتطابق (' + escapeHtml(kindText) + ').</b><br>لا تُدخل درجات الآن. يمكنك استعادة النسخة الاحتياطية التي أُخذت قبل العملية.' + detail + '<br>', false);
+  if (pend.backupId) {
+    const r = document.createElement('button'); r.type = 'button'; r.textContent = 'استعادة النسخة الاحتياطية السابقة';
+    r.onclick = () => fsRestoreBackup(pend.backupId, null);
+    b.insertBefore(r, b.lastChild);
   }
 }
+
+async function fsRestoreBackup(id, status) {
+  try {
+    const item = await fsIdbGet(id);
+    if (!item || !item.localDb) throw new Error('لم تُعثر على النسخة الاحتياطية.');
+    if (!confirm('ستُستبدل بيانات هذا الجهاز بالنسخة الاحتياطية المؤرخة ' + new Date(item.at).toLocaleString('ar-SA') + ' (' + (item.localDb.students || []).length + ' سجل طالب). لن تتغير السحابة. متابعة؟')) return;
+    localStorage.removeItem(FS_PENDING_KEY);
+    const bk = await fsMakeBackup('الاستعادة', null);
+    await fsReplaceLocal(item.localDb, 'restore', bk.id);
+  } catch (e) { if (status) status.textContent = 'تعذّرت الاستعادة: ' + e.message; else alert('تعذّرت الاستعادة: ' + e.message); }
+}
+
+// ---------- عرض التقرير ----------
+function fsRenderReport(summary, title, checks, fieldRows, breakdown) {
+  summary.replaceChildren();
+  const h = document.createElement('b'); h.textContent = title; summary.appendChild(h);
+  const ul = document.createElement('ul'); ul.style.cssText = 'list-style:none;padding:0;margin:8px 0';
+  for (const c of checks) {
+    const li = document.createElement('li'); li.style.cssText = 'margin:4px 0;color:' + (c.ok ? '#1f6b3f' : '#b42318');
+    li.textContent = (c.ok ? '✓ ' : '✗ ') + c.label + (c.detail ? ' — ' + c.detail : '');
+    if (!c.ok && c.paths && c.paths.length) { const s = document.createElement('div'); s.style.cssText = 'font-size:12px;direction:ltr;text-align:left'; s.textContent = c.paths.slice(0, 15).join('\n'); s.style.whiteSpace = 'pre-wrap'; li.appendChild(s); }
+    ul.appendChild(li);
+  }
+  summary.appendChild(ul);
+  const mk = (head, rows) => {
+    const t = document.createElement('table'); t.style.cssText = 'width:100%;min-width:560px;margin:8px 0';
+    t.innerHTML = '<thead><tr>' + head.map(x => '<th>' + escapeHtml(x) + '</th>').join('') + '</tr></thead><tbody></tbody>';
+    for (const r of rows) { const tr = document.createElement('tr'); for (const v of r) { const td = document.createElement('td'); td.textContent = String(v); tr.appendChild(td); } t.tBodies[0].appendChild(tr); }
+    summary.appendChild(t);
+  };
+  if (fieldRows) mk(fieldRows.head, fieldRows.rows);
+  if (breakdown) mk(breakdown.head, breakdown.rows);
+}
+function fsFieldRows(a, b, headA, headB, allowedNote) {
+  const keys = [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])];
+  const rows = keys.map(k => {
+    const same = fsDeepDiff(a?.[k], b?.[k], 1).count === 0;
+    return [FS_FIELD_LABELS[k] || k, fsSize(a?.[k]), fsSize(b?.[k]), same ? 'متطابق' : (allowedNote && allowedNote[k]) || 'مختلف'];
+  });
+  return { head: ['الحقل', headA, headB, 'النتيجة'], rows };
+}
+function fsBreakdownRows(a, b, headA, headB) {
+  const keys = [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])].sort();
+  return { head: ['خانات المواد', headA, headB], rows: keys.map(k => [fsBreakdownLabel(k), a[k] || 0, b[k] || 0]) };
+}
+function fsReportForDownload(title, checks) {
+  return { kind: 'quran_fullsync_check_report_no_names', title, at: new Date().toISOString(), checks: checks.map(c => ({ ok: c.ok, label: c.label, detail: c.detail || '' })) };
+}
+
+// ---------- فحص حالة السحابة قبل الرفع ----------
+function fsUploadGuard(src, cloudMeta) {
+  const hasMark = !!(src.syncMarks && src.syncMarks.islamicTestsReset);
+  const base = loadJSON(FS_BASE_KEY, null);
+  if (!hasMark) {
+    if (!cloudMeta) return { ok: true, text: 'السحابة لا تحتوي نسخة كاملة بعد؛ سيكون هذا هو النقل الأول من هذا الجهاز.' };
+    if (cloudMeta.sourceFp && cloudMeta.sourceFp === fsFp(src)) return { ok: true, text: 'إعادة محاولة للنقل الأول نفسه من هذا الجهاز.' };
+    return { ok: false, text: 'توجد نسخة كاملة معتمدة في السحابة، وهذا الجهاز لم يستقبلها بعد (بياناته أقدم وقد تحتوي اختبارات الإسلامية القديمة). استقبل من السحابة بدل الرفع.' };
+  }
+  if (!cloudMeta) return { ok: true, text: 'لا توجد نسخة كاملة في السحابة؛ سيُرفع هذا الجهاز كنسخة أولى.' };
+  const localContent = fsContentFp(src);
+  if (cloudMeta.contentFp === localContent) return { ok: true, same: true, text: 'السحابة مطابقة لهذا الجهاز بالفعل.' };
+  if (base && base.contentFp === cloudMeta.contentFp) return { ok: true, text: 'السحابة لم تتغير منذ آخر مزامنة لهذا الجهاز؛ الرفع آمن.' };
+  return { ok: false, text: 'السحابة تغيّرت من جهاز آخر منذ آخر مزامنة لهذا الجهاز. لمنع ضياع أي درجات أُوقف الرفع؛ استقبل أولًا ثم أعد إدخال ما يلزم، أو راجعني.' };
+}
+
+// ---------- ١) محاكاة الرفع ----------
+async function fsSimulateUpload(ui) {
+  fsSim.up = null; ui.upBtn.disabled = true;
+  const checks = [], check = (ok, label, detail, paths) => { checks.push({ ok: !!ok, label, detail, paths }); return ok; };
+  ui.status.textContent = 'جارٍ المحاكاة... لا يُكتب أي شيء.';
+  try {
+    const { stored: src, memMatches, memDiff } = fsSourceDb();
+    check(memMatches, 'البيانات المحفوظة مطابقة لما يعرضه التطبيق الآن', memMatches ? '' : 'أعد تحميل الصفحة ثم أعد المحاكاة', memDiff.paths);
+    const plan = fsBuildPayload(src, new Date().toISOString());
+    const res = fsVerifyPayload(src, plan, check);
+    let cloudMeta = null, guard = null;
+    try {
+      const row = await fsFetchRow(FULL_ROW_ID, 'id,meta,updated_at');
+      cloudMeta = row ? row.meta : null;
+      guard = fsUploadGuard(src, cloudMeta);
+      check(guard.ok, 'حالة السحابة تسمح بالرفع دون دمج أو فقد', guard.text);
+    } catch (e) { check(false, 'قراءة حالة السحابة', e.message); }
+    const allOk = checks.every(c => c.ok);
+    const note = plan.firstTransfer ? { coursework: 'متوقع: حذف اختبارات الإسلامية فقط', auditLog: 'متوقع: قيد واحد جديد', syncMarks: 'متوقع: علامة الإصلاح' } : null;
+    fsRenderReport(ui.summary, (allOk ? '✓ نجحت جميع فحوص المحاكاة' : '✗ فشل فحص واحد أو أكثر؛ الرفع يبقى معطّلًا') + (plan.firstTransfer ? ' — وضع النقل الأول' : ' — وضع الرفع العادي'),
+      checks, fsFieldRows(src, plan.payload, 'هذا الجهاز الآن', 'ما سيُرفع', note), fsBreakdownRows(res.breakdownBefore, res.breakdownAfter, 'الآن', 'بعد النقل'));
+    const dl = document.createElement('button'); dl.type = 'button'; dl.textContent = 'تنزيل تقرير الفحص (دون أسماء أو درجات)';
+    dl.onclick = () => fsDownload(fsReportForDownload('محاكاة الرفع', checks), 'تقرير-محاكاة-الرفع'); ui.summary.appendChild(dl);
+    if (allOk && !(guard && guard.same)) { fsSim.up = { srcFp: fsFp(src), firstTransfer: plan.firstTransfer, at: Date.now() }; ui.upBtn.disabled = false; }
+    ui.status.textContent = allOk ? (guard && guard.same ? 'المحاكاة ناجحة، والسحابة مطابقة لهذا الجهاز؛ لا حاجة للرفع.' : 'نجحت المحاكاة دون أي كتابة. زر الرفع الحقيقي أصبح متاحًا.') : 'لم يُكتب شيء. الرفع معطّل حتى تنجح جميع الفحوص.';
+  } catch (e) { ui.status.textContent = 'تعذّرت المحاكاة: ' + e.message + ' (لم يُكتب شيء)'; }
+}
+
+// ---------- ٢) الرفع الحقيقي ----------
+async function fsUpload(ui) {
+  if (!fsSim.up) { ui.status.textContent = 'شغّل المحاكاة أولًا.'; return; }
+  ui.upBtn.disabled = true;
+  const checks = [], check = (ok, label, detail, paths) => { checks.push({ ok: !!ok, label, detail, paths }); return ok; };
+  try {
+    const { stored: src, memMatches } = fsSourceDb();
+    if (!memMatches || fsFp(src) !== fsSim.up.srcFp) throw new Error('تغيّرت البيانات بعد المحاكاة؛ أعد المحاكاة أولًا.');
+    ui.status.textContent = 'قراءة السحابة للنسخ الاحتياطي...';
+    const prevFull = await fsFetchRow(FULL_ROW_ID);
+    let prevMain = null; try { prevMain = await fsFetchRow('main'); } catch (_) {}
+    const guard = fsUploadGuard(src, prevFull ? prevFull.meta : null);
+    if (!guard.ok) throw new Error(guard.text);
+    const plan = fsBuildPayload(src, new Date().toISOString());
+    fsVerifyPayload(src, plan, check);
+    if (!checks.every(c => c.ok)) throw new Error('فشل فحص سلامة أثناء التحضير: ' + checks.filter(c => !c.ok).map(c => c.label).join('، '));
+    const msg = plan.firstTransfer
+      ? 'النقل الأول: سيُرفع ' + src.students.length + ' سجل طالب وجميع الحقول كما هي، مع حذف ' + plan.removed.length + ' خانة من اختبارات الدراسات الإسلامية القديمة فقط (من السحابة ومن هذا الجهاز).\nستُنزَّل نسخة احتياطية أولًا. متابعة؟'
+      : 'سيُرفع ' + src.students.length + ' سجل طالب وجميع الحقول كما هي دون أي دمج. ستُنزَّل نسخة احتياطية أولًا. متابعة؟';
+    if (!confirm(msg)) { ui.status.textContent = 'أُلغي الرفع. لم يتغير شيء.'; ui.upBtn.disabled = false; return; }
+    ui.status.textContent = 'إنشاء النسخة الاحتياطية...';
+    const bk = await fsMakeBackup('الرفع', { full: prevFull, main: prevMain });
+    const payload = plan.payload, fp = fsFp(payload);
+    const meta = { format: FULL_FORMAT, fp, contentFp: fsContentFp(payload), sourceFp: fsFp(src), firstTransfer: plan.firstTransfer,
+      removedIslamicTests: plan.removed.length, islamicTests: fsIslamicTestCount(payload), students: payload.students.length,
+      uploadedAt: new Date().toISOString(), device: (navigator.userAgent || '').slice(0, 140) };
+    ui.status.textContent = 'جارٍ الرفع...';
+    const { error } = await supa.from('gradebook_state').upsert({ id: FULL_ROW_ID, db: payload, meta, updated_at: new Date().toISOString() });
+    if (error) throw new Error('رفضت السحابة الرفع: ' + error.message + ' (لم يتغير شيء على هذا الجهاز)');
+    ui.status.textContent = 'التحقق: قراءة النسخة من السحابة ومقارنتها كاملة...';
+    const back = await fsFetchRow(FULL_ROW_ID);
+    const d = back ? fsDeepDiff(payload, back.db) : { count: -1, paths: [] };
+    if (!back || d.count !== 0 || fsFp(back.db) !== fp || back.meta?.fp !== fp) {
+      try { if (prevFull) await supa.from('gradebook_state').upsert(prevFull); else await supa.from('gradebook_state').delete().eq('id', FULL_ROW_ID); } catch (_) {}
+      throw new Error('النسخة المقروءة من السحابة لا تطابق ما رُفع (' + d.count + ' فرق)؛ أُعيدت السحابة لحالتها السابقة ولم يتغير هذا الجهاز.');
+    }
+    if (plan.firstTransfer) {
+      ui.status.textContent = 'تطابقت السحابة تمامًا. جارٍ تطبيق حذف اختبارات الإسلامية على هذا الجهاز...';
+      await fsReplaceLocal(payload, 'upload', bk.id);
+      return;
+    }
+    saveJSON(FS_BASE_KEY, { contentFp: meta.contentFp, fp, at: new Date().toISOString(), kind: 'upload' });
+    fsSim.up = null;
+    ui.status.textContent = '✓ تم الرفع، وتطابقت نسخة السحابة مع هذا الجهاز حقلًا بحقل وقيمةً بقيمة.';
+  } catch (e) { ui.status.textContent = 'توقف الرفع: ' + e.message; fsSim.up = null; }
+}
+
+// ---------- ١) محاكاة الاستقبال ----------
+function fsVerifyCloudRow(row, check) {
+  if (!check(!!row && !!row.db, 'وُجدت نسخة كاملة في السحابة')) return false;
+  const m = row.meta || {};
+  check(m.format === FULL_FORMAT, 'صيغة النسخة هي صيغة النقل الكامل', m.format || 'غير معروفة');
+  check(fsFp(row.db) === m.fp, 'بصمة البيانات سليمة (لم تتغير أو تنقص في الطريق)');
+  check(fsValidDb(row.db), 'بنية البيانات صالحة ويقبلها التطبيق عند الفتح');
+  check(Array.isArray(row.db.students) && row.db.students.length > 0 && row.db.students.length === m.students, 'عدد سجلات الطلاب مطابق لما سُجّل عند الرفع', (row.db.students || []).length + '');
+  check(!!(row.db.syncMarks && row.db.syncMarks.islamicTestsReset), 'تحمل علامة حذف اختبارات الإسلامية القديمة');
+  check(fsIslamicTestCount(row.db) === m.islamicTests && (!m.firstTransfer || m.islamicTests === 0), 'لا توجد اختبارات إسلامية قديمة مستعادة', fsIslamicTestCount(row.db) + ' خانة');
+  const rt = JSON.parse(JSON.stringify(row.db));
+  check(fsDeepDiff(row.db, rt, 5).count === 0, 'محاكاة الحفظ على الجهاز دون فقد أي قيمة');
+  const size = JSON.stringify(row.db).length;
+  check(true, 'حجم البيانات', Math.round(size / 1024) + ' ك.ب' + (size > FS_LS_WARN_CHARS ? ' — كبير نسبيًا' : ''));
+  return true;
+}
+function fsReceiveGuard(local, row) {
+  const base = loadJSON(FS_BASE_KEY, null);
+  if (!local) return { ok: true, text: 'لا توجد بيانات محلية على هذا الجهاز.' };
+  const lc = fsContentFp(local);
+  if (row.meta.contentFp === lc) return { ok: true, same: true, text: 'هذا الجهاز مطابق للسحابة بالفعل.' };
+  if (!base) return { ok: true, warnReplace: true, text: 'هذا الجهاز لم يزامن بالنظام الجديد من قبل؛ ستُستبدل بياناته القديمة كاملةً بالنسخة المعتمدة (بعد نسخة احتياطية).' };
+  if (base.contentFp === lc) return { ok: true, text: 'لا توجد تعديلات محلية غير مرفوعة؛ الاستقبال آمن.' };
+  return { ok: true, localChanges: true, text: 'تنبيه: يوجد على هذا الجهاز تعديلات بعد آخر مزامنة لم تُرفع. الاستقبال سيستبدلها (تبقى في النسخة الاحتياطية).' };
+}
+async function fsSimulateReceive(ui) {
+  fsSim.down = null; ui.downBtn.disabled = true;
+  const checks = [], check = (ok, label, detail, paths) => { checks.push({ ok: !!ok, label, detail, paths }); return ok; };
+  ui.status.textContent = 'جارٍ محاكاة الاستقبال... لا يُكتب أي شيء.';
+  try {
+    const row = await fsFetchRow(FULL_ROW_ID);
+    fsVerifyCloudRow(row, check);
+    let local = null; try { local = fsReadStoredDb(); } catch (_) {}
+    let guard = null;
+    if (row && row.db) { guard = fsReceiveGuard(local, row); check(guard.ok, 'حالة هذا الجهاز', guard.text); }
+    const allOk = checks.every(c => c.ok);
+    fsRenderReport(ui.summary, allOk ? '✓ نجحت جميع فحوص محاكاة الاستقبال' : '✗ فشل فحص؛ الاستقبال يبقى معطّلًا', checks,
+      row && row.db ? fsFieldRows(local || {}, row.db, 'هذا الجهاز الآن', 'بعد الاستقبال') : null,
+      row && row.db ? fsBreakdownRows(fsCourseBreakdown(local?.coursework), fsCourseBreakdown(row.db.coursework), 'الآن', 'بعد الاستقبال') : null);
+    const dl = document.createElement('button'); dl.type = 'button'; dl.textContent = 'تنزيل تقرير الفحص (دون أسماء أو درجات)';
+    dl.onclick = () => fsDownload(fsReportForDownload('محاكاة الاستقبال', checks), 'تقرير-محاكاة-الاستقبال'); ui.summary.appendChild(dl);
+    if (allOk && !(guard && guard.same)) { fsSim.down = { fp: row.meta.fp, guard, at: Date.now() }; ui.downBtn.disabled = false; }
+    ui.status.textContent = allOk ? (guard && guard.same ? 'هذا الجهاز مطابق للسحابة؛ لا حاجة للاستقبال.' : 'نجحت المحاكاة دون أي كتابة. زر الاستقبال الحقيقي أصبح متاحًا.') : 'لم يُكتب شيء.';
+    if (allOk && guard && guard.same && !loadJSON(FS_BASE_KEY, null)) saveJSON(FS_BASE_KEY, { contentFp: row.meta.contentFp, fp: row.meta.fp, at: new Date().toISOString(), kind: 'match' });
+  } catch (e) { ui.status.textContent = 'تعذّرت المحاكاة: ' + e.message + ' (لم يُكتب شيء)'; }
+}
+
+// ---------- ٢) الاستقبال الحقيقي ----------
+async function fsReceive(ui) {
+  if (!fsSim.down) { ui.status.textContent = 'شغّل محاكاة الاستقبال أولًا.'; return; }
+  ui.downBtn.disabled = true;
+  try {
+    const row = await fsFetchRow(FULL_ROW_ID);
+    if (!row || row.meta?.fp !== fsSim.down.fp) throw new Error('تغيّرت نسخة السحابة بعد المحاكاة؛ أعد المحاكاة.');
+    const checks = [], check = (ok, label) => { checks.push({ ok: !!ok, label }); return ok; };
+    fsVerifyCloudRow(row, check);
+    if (!checks.every(c => c.ok)) throw new Error('فشل فحص سلامة: ' + checks.filter(c => !c.ok).map(c => c.label).join('، '));
+    let local = null; try { local = fsReadStoredDb(); } catch (_) {}
+    const guard = fsReceiveGuard(local, row);
+    if (guard.localChanges) {
+      const typed = prompt(guard.text + '\nللمتابعة اكتب كلمة: استبدال');
+      if ((typed || '').trim() !== 'استبدال') { ui.status.textContent = 'أُلغي الاستقبال. لم يتغير شيء.'; ui.downBtn.disabled = false; return; }
+    } else if (!confirm('سيُستبدل كل ما على هذا الجهاز بالنسخة المعتمدة من السحابة (' + row.db.students.length + ' سجل طالب، بجميع الحقول). ستُنزَّل نسخة احتياطية أولًا. متابعة؟')) {
+      ui.status.textContent = 'أُلغي الاستقبال. لم يتغير شيء.'; ui.downBtn.disabled = false; return;
+    }
+    ui.status.textContent = 'إنشاء النسخة الاحتياطية...';
+    const bk = local ? await fsMakeBackup('الاستقبال', null) : { id: null };
+    ui.status.textContent = 'جارٍ الحفظ على هذا الجهاز...';
+    await fsReplaceLocal(row.db, 'receive', bk.id);
+  } catch (e) { ui.status.textContent = 'توقف الاستقبال: ' + e.message; fsSim.down = null; }
+}
+
+async function fsExportCloud(status) {
+  status.textContent = 'جارٍ قراءة السحابة وتنزيلها دون تغيير...';
+  try {
+    const full = await fsFetchRow(FULL_ROW_ID); let main = null; try { main = await fsFetchRow('main'); } catch (_) {}
+    if (!full && !main) { status.textContent = 'لا توجد بيانات في السحابة.'; return; }
+    fsDownload({ exportKind: 'gradebook_cloud_readonly_backup_v2', exportedAt: new Date().toISOString(), full, main }, 'نسخة-السحابة');
+    status.textContent = 'نُزّلت نسخة السحابة. لم يتغير شيء.';
+  } catch (e) { status.textContent = 'تعذّر التنزيل: ' + e.message; }
+}
+
+function fsDeviceStateText() {
+  let local = null; try { local = fsReadStoredDb(); } catch (_) {}
+  const base = loadJSON(FS_BASE_KEY, null), pend = loadJSON(FS_PENDING_KEY, null);
+  const parts = [];
+  parts.push(local ? (local.students || []).length + ' سجل طالب محفوظ على هذا الجهاز' : 'لا توجد بيانات على هذا الجهاز');
+  parts.push(local && local.syncMarks && local.syncMarks.islamicTestsReset ? 'تم حذف اختبارات الإسلامية القديمة' : 'لم يُطبَّق حذف اختبارات الإسلامية القديمة بعد');
+  parts.push(base ? 'آخر مزامنة ناجحة: ' + new Date(base.at).toLocaleString('ar-SA') : 'لم يزامن بالنظام الجديد بعد');
+  if (base && local) parts.push(fsContentFp(local) === base.contentFp ? 'لا تعديلات غير مرفوعة' : 'يوجد تعديلات بعد آخر مزامنة');
+  if (pend) parts.push('يوجد تحقق معلّق بعد إعادة التحميل');
+  return parts.join(' • ');
+}
+
 async function renderSyncTab(root) {
-  const last=loadSyncStatus();
-  root.innerHTML=`
-    <div class="card">
-      <h3>مزامنة الدرجات بين هذا الجهاز والسحابة والأجهزة الأخرى</h3>
-      <p class="muted">تُدمج التغييرات خانة بخانة عبر Supabase.</p>
-      <p id="paSyncBuild" style="margin:8px 0;font-weight:700">إصدار المزامنة: VERIFY-FULL-2026-10-03-B</p>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button id="paSyncDevices" class="btn primary">مزامنة الأجهزة الآن</button>
-        <button id="paSyncDiagnostic" class="btn">فحص المزامنة دون رفع</button>
-        <button id="paAdoptRosterOrder" class="btn">اعتماد ترتيب هذا الجهاز</button>
-        <span id="paSyncStatus" role="status" aria-live="polite"
-          style="display:inline-block;min-height:24px;padding:5px 8px;border-radius:8px"></span>
-      </div>
-      <div id="paSyncLast" class="muted" style="margin-top:8px"></div>
-      <pre id="paSyncDiagnosticOut" style="white-space:pre-wrap;direction:ltr;text-align:left;font-size:11px;max-height:360px;overflow:auto;background:#f7f7f7;padding:8px;border-radius:8px;margin-top:10px"></pre>
-      <details style="margin-top:14px">
-        <summary>أداة الطوارئ</summary>
-        <p class="muted">لا تستخدمها إلا عند التأكد أن بيانات هذا الجهاز هي النسخة الصحيحة التي تريد استبدال السحابة بها.</p>
-        <button id="paForceUpload" class="btn">فرض رفع بيانات هذا الجهاز</button>
-      </details>
-    </div>`;
-  const syncStatus=root.querySelector('#paSyncStatus');
-  const lastBox=root.querySelector('#paSyncLast');
-  if(last){
-    paintSyncStatus(syncStatus,last);
-    if(last.at) lastBox.textContent='آخر حالة محفوظة: '+new Date(last.at).toLocaleString('ar-SA');
-  }else{
-    syncStatus.textContent='جاهز للمزامنة.';
+  fsSim.up = null; fsSim.down = null;
+  root.innerHTML = `<div class="summary-card"><b>النقل الكامل الآمن بين الأجهزة</b>
+    <p class="muted">ينقل قاعدة البيانات كاملة بكل حقولها دون أي دمج مع بيانات السحابة القديمة. لا يتفعّل أي زر حقيقي قبل نجاح المحاكاة، وتُنزَّل نسخة احتياطية قبل كل استبدال. أغلق أي نافذة أخرى مفتوحة للتطبيق على هذا الجهاز قبل البدء.</p>
+    <p id="fsState" class="muted"></p>
+    <div class="summary-card"><b>على الجهاز المصدر (اللابتوب): رفع</b><br>
+      <button id="fsSimUp" type="button">١. محاكاة الرفع والتحقق (لا يكتب شيئًا)</button>
+      <button id="fsUp" type="button" disabled>٢. الرفع الحقيقي (يتفعّل بعد نجاح المحاكاة)</button></div>
+    <div class="summary-card"><b>على الجهاز المستقبِل (الآيباد): استقبال</b><br>
+      <button id="fsSimDown" type="button">١. محاكاة الاستقبال والتحقق (لا يكتب شيئًا)</button>
+      <button id="fsDown" type="button" disabled>٢. الاستقبال الحقيقي (يتفعّل بعد نجاح المحاكاة)</button></div>
+    <details><summary>أدوات النسخ الاحتياطي</summary>
+      <button id="fsBackupNow" type="button">تنزيل نسخة احتياطية كاملة من هذا الجهاز</button>
+      <button id="fsExportCloud" type="button">تنزيل نسخة من السحابة (قراءة فقط)</button>
+      <div id="fsBackups"></div></details>
+    <p id="fsStatus" class="muted" style="font-weight:bold"></p>
+    <div id="fsSummary" style="overflow-x:auto;margin-top:12px"></div></div>
+    <button id="paLogout" type="button">تسجيل خروج</button>`;
+  const ui = { status: root.querySelector('#fsStatus'), summary: root.querySelector('#fsSummary'), upBtn: root.querySelector('#fsUp'), downBtn: root.querySelector('#fsDown') };
+  root.querySelector('#fsState').textContent = fsDeviceStateText();
+  root.querySelector('#fsSimUp').onclick = () => fsSimulateUpload(ui);
+  ui.upBtn.onclick = () => fsUpload(ui);
+  root.querySelector('#fsSimDown').onclick = () => fsSimulateReceive(ui);
+  ui.downBtn.onclick = () => fsReceive(ui);
+  root.querySelector('#fsBackupNow').onclick = async () => { try { await fsMakeBackup('يدوي', null); ui.status.textContent = 'أُنشئت نسخة احتياطية كاملة.'; renderBackups(); } catch (e) { ui.status.textContent = e.message; } };
+  root.querySelector('#fsExportCloud').onclick = () => fsExportCloud(ui.status);
+  root.querySelector('#paLogout').onclick = async () => { await supa.auth.signOut(); loginBox(root, 'syncDevices'); };
+  async function renderBackups() {
+    const host = root.querySelector('#fsBackups'); host.replaceChildren();
+    const list = await fsListBackups();
+    if (!list.length) { host.textContent = 'لا توجد نسخ احتياطية محفوظة داخل المتصفح بعد.'; return; }
+    for (const b of list) {
+      const row = document.createElement('div'); row.className = 'muted';
+      row.textContent = new Date(b.at).toLocaleString('ar-SA') + ' — قبل ' + b.reason + ' — ' + ((b.localDb && b.localDb.students) || []).length + ' سجل طالب ';
+      const r = document.createElement('button'); r.type = 'button'; r.textContent = 'استعادة';
+      r.onclick = () => fsRestoreBackup(b.id, ui.status); row.appendChild(r); host.appendChild(row);
+    }
   }
-  root.querySelector('#paSyncDevices').onclick=()=>syncDevices(syncStatus);
-  root.querySelector('#paSyncDiagnostic').onclick=()=>runSyncDiagnostic(syncStatus,root.querySelector('#paSyncDiagnosticOut'));
-  root.querySelector('#paAdoptRosterOrder').onclick=()=>adoptThisDeviceRosterOrder(syncStatus);
-  root.querySelector('#paForceUpload').onclick=()=>forceUploadLocal(syncStatus);
+  renderBackups();
 }
+
+if (window.__app) fsPostReloadCheck(); else window.addEventListener('app-ready', fsPostReloadCheck, { once: true });
 async function renderParentTab(root) {
   const students=uniqueStudents(), semesterOptions=['الأول','الثاني'].map((n,i)=>`<option value="${i}">${n}</option>`).join('');
   const notice=isParentPortalConfigured()?'':'<div class="summary-card"><b>بوابة ولي الأمر لم تُنشر بعد.</b><p class="muted">سننشر parent.html على رابط HTTPS عام، ثم نضع الرابط في PARENT_PORTAL_URL.</p></div>';
@@ -551,8 +735,7 @@ async function latestValidLinkCode(studentId) {
   const nowIso = new Date().toISOString();
   const {data,error}=await supa.from('link_codes')
     .select('code,expires_at')
-.eq('student_id',studentId)
-    .eq('used',false)
+    .eq('student_id',studentId)
     .gt('expires_at',nowIso)
     .order('expires_at',{ascending:false})
     .limit(1);
@@ -561,7 +744,8 @@ async function latestValidLinkCode(studentId) {
 }
 
 async function createFreshLinkCode(st) {
-  const {error:upErr}=await supa.from('students_public').upsert({id:st.key,full_name:st.name},{onConflict:'id'});
+  const portalEnabled=window.__app?.db?.studentSupport?.[st.key]?.portalEnabled!==false;
+  const {error:upErr}=await supa.from('students_public').upsert({id:st.key,full_name:st.name,portal_enabled:portalEnabled},{onConflict:'id'});
   if(upErr) return {error:upErr};
   const code=randomLinkCode();
   const expiresAt=new Date(Date.now()+LINK_CODE_VALID_HOURS*3600*1000).toISOString();
@@ -888,8 +1072,5 @@ function renderMigrationReview(container, onConfirm) {
   };
 }
 
-async function init() {
-  let reviewed=false;try{reviewed=localStorage.getItem(MIGRATION_REVIEWED_KEY)==='1';}catch(_){}
-  if(!reviewed){const root=document.getElementById('syncDevicesBody');if(root)renderMigrationReview(root,()=>renderCloudTab('syncDevices'));}
-}
-if(window.__app)init();else window.addEventListener('app-ready',init,{once:true});
+// وضع الفحص: تعطيل مراجعة الترحيل التلقائية؛ قد تغيّر هوية الطلاب عند التأكيد.
+// لا تنفّذ هذه النسخة أي عملية رفع أو استقبال لبيانات سجل الدرجات.
