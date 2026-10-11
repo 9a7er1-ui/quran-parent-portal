@@ -105,7 +105,7 @@ const FS_IDB_NAME = 'quran-fullsync-v2';
 const FS_UI_FIELDS = ['activeSection', 'activeSubject', 'view', 'lastBackupAt']; // تُنقل، لكنها لا تُعدّ «تعديلًا على البيانات»
 const FS_LS_WARN_CHARS = 2000000;
 
-const fsSim = { up: null, down: null, restore: null };
+const fsSim = { up: null, down: null, restore: null, conflict: null };
 
 function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (_) { return fallback; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (_) { return false; } }
@@ -365,7 +365,7 @@ async function fsPostReloadCheck() {
   const fpNow = stored ? fsFp(stored) : '';
   const kindText = { upload: 'الرفع الأول من هذا الجهاز', receive: 'الاستقبال من السحابة', restore: 'استعادة النسخة الاحتياطية', 'auto-receive': 'استقبال تلقائي لآخر نسخة من السحابة', 'restore-cloud': 'استعادة نسخة من سجل السحابة' }[pend.kind] || pend.kind;
   if (stored && memOk && fpNow === pend.expectedFp) {
-    if (pend.kind !== 'restore') saveJSON(FS_BASE_KEY, { contentFp: pend.contentFp, fp: pend.expectedFp, at: new Date().toISOString(), kind: pend.kind });
+    if (pend.kind !== 'restore') { saveJSON(FS_BASE_KEY, { contentFp: pend.contentFp, fp: pend.expectedFp, at: new Date().toISOString(), kind: pend.kind }); fsSaveBaseContent(stored); }
     localStorage.removeItem(FS_PENDING_KEY);
     try { await fsIdbDel('expected-pending'); } catch (_) {}
     const okb = fsBanner('<b>✓ نجح التحقق النهائي بعد إعادة التحميل (' + escapeHtml(kindText) + ').</b><br>بيانات التطبيق الآن مطابقة حقلًا بحقل وقيمةً بقيمة للنسخة المعتمدة. (' + (stored.students || []).length + ' سجل طالب)', true);
@@ -534,7 +534,7 @@ async function fsUpload(ui) {
       await fsReplaceLocal(payload, 'upload', bk.id);
       return;
     }
-    saveJSON(FS_BASE_KEY, { contentFp: meta.contentFp, fp, at: new Date().toISOString(), kind: 'upload' });
+    saveJSON(FS_BASE_KEY, { contentFp: meta.contentFp, fp, at: new Date().toISOString(), kind: 'upload' }); fsSaveBaseContent(payload);
     fsSim.up = null;
     ui.status.textContent = '✓ تم الرفع، وتطابقت نسخة السحابة مع هذا الجهاز حقلًا بحقل وقيمةً بقيمة.';
   } catch (e) { ui.status.textContent = 'توقف الرفع: ' + e.message; fsSim.up = null; }
@@ -583,7 +583,7 @@ async function fsSimulateReceive(ui) {
     dl.onclick = () => fsDownload(fsReportForDownload('محاكاة الاستقبال', checks), 'تقرير-محاكاة-الاستقبال'); ui.summary.appendChild(dl);
     if (allOk && !(guard && guard.same)) { fsSim.down = { fp: row.meta.fp, guard, at: Date.now() }; ui.downBtn.disabled = false; }
     ui.status.textContent = allOk ? (guard && guard.same ? 'هذا الجهاز مطابق للسحابة؛ لا حاجة للاستقبال.' : 'نجحت المحاكاة دون أي كتابة. زر الاستقبال الحقيقي أصبح متاحًا.') : 'لم يُكتب شيء.';
-    if (allOk && guard && guard.same && !loadJSON(FS_BASE_KEY, null)) saveJSON(FS_BASE_KEY, { contentFp: row.meta.contentFp, fp: row.meta.fp, at: new Date().toISOString(), kind: 'match' });
+    if (allOk && guard && guard.same && !loadJSON(FS_BASE_KEY, null)) { saveJSON(FS_BASE_KEY, { contentFp: row.meta.contentFp, fp: row.meta.fp, at: new Date().toISOString(), kind: 'match' }); fsSaveBaseContent(local); }
   } catch (e) { ui.status.textContent = 'تعذّرت المحاكاة: ' + e.message + ' (لم يُكتب شيء)'; }
 }
 
@@ -641,6 +641,10 @@ async function renderSyncTab(root) {
     <p id="fsState" class="muted"></p>
     <div class="summary-card"><label><input type="checkbox" id="fsAutoToggle"> <b>المزامنة التلقائية على هذا الجهاز</b></label>
       <p class="muted">عند فتح التطبيق يستقبل آخر نسخة تلقائيًا، وبعد كل رصد يرفع تلقائيًا خلال ثوانٍ. لا يدمج ولا يحذف شيئًا: إن وُجدت تعديلات على جهازين معًا يتوقف وينبّهك. الأزرار اليدوية أدناه للحالات الخاصة فقط.</p></div>
+    <div class="summary-card"><b>عند ظهور «تعارض»</b>
+      <p class="muted">اعرض الفروق أولًا (لا يكتب شيئًا)، ثم اعتمد نسخة واحدة كاملة. النسخة الأخرى لا تضيع: نسخة السحابة تُحفظ في «سجل النسخ»، ونسخة هذا الجهاز تُحفظ في «النسخ الاحتياطية».</p>
+      <button id="fsDiffBtn" type="button">عرض الفروق بين هذا الجهاز والسحابة (لا يكتب شيئًا)</button>
+      <div id="fsConflictActions" style="display:none;margin-top:8px"><button id="fsKeepLocal" type="button">اعتماد نسخة هذا الجهاز ورفعها</button> <button id="fsKeepCloud" type="button">اعتماد نسخة السحابة على هذا الجهاز</button></div></div>
     <div class="summary-card"><b>رفع بيانات هذا الجهاز إلى السحابة</b><br>
       <button id="fsSimUp" type="button">١. محاكاة الرفع والتحقق (لا يكتب شيئًا)</button>
       <button id="fsUp" type="button" disabled>٢. الرفع الحقيقي (يتفعّل بعد نجاح المحاكاة)</button></div>
@@ -666,6 +670,10 @@ async function renderSyncTab(root) {
     <button id="paLogout" type="button">تسجيل خروج</button>`;
   const ui = { status: root.querySelector('#fsStatus'), summary: root.querySelector('#fsSummary'), upBtn: root.querySelector('#fsUp'), downBtn: root.querySelector('#fsDown'), restoreBtn: root.querySelector('#fsRestoreBtn') };
   ui.restoreBtn.onclick = () => fsRestoreCloudVersion(ui);
+  const cActions = root.querySelector('#fsConflictActions');
+  root.querySelector('#fsDiffBtn').onclick = () => fsShowConflict(ui, cActions);
+  root.querySelector('#fsKeepLocal').onclick = () => fsKeepLocal(ui);
+  root.querySelector('#fsKeepCloud').onclick = () => fsKeepCloud(ui);
   root.querySelector('#fsHistDetails').addEventListener('toggle', e => { if (e.target.open) fsRenderHistory(root, ui); });
   const shareList = root.querySelector('#fsShareList');
   root.querySelector('#fsShareDetails').addEventListener('toggle', e => { if (e.target.open) fsRenderViewerLinks(shareList); });
@@ -917,6 +925,172 @@ async function fsRenderViewerLinks(host) {
   }
 }
 
+
+// ============================================================
+// حل التعارض: عرض الفروق بأسماء الطلاب والخانات، ثم اعتماد نسخة واحدة كاملة.
+// لا دمج. النسخة غير المعتمدة تبقى محفوظة: نسخة السحابة في «سجل النسخ»، ونسخة الجهاز في «النسخ الاحتياطية».
+// وتُحفظ على كل جهاز نسخة «آخر مزامنة» حتى يبيّن التقرير أي الطرفين غيّر كل خانة.
+// ============================================================
+async function fsSaveBaseContent(db) {
+  try { if (db) await fsIdbPut({ id: 'base-content', kind: 'base', at: new Date().toISOString(), contentFp: fsContentFp(db), data: db }); } catch (_) {}
+}
+async function fsLoadBaseContent() {
+  try {
+    const base = loadJSON(FS_BASE_KEY, null), item = await fsIdbGet('base-content');
+    if (base && item && item.contentFp === base.contentFp) return item.data;
+  } catch (_) {}
+  return null;
+}
+
+function fsKeyDescribe(bucket, key, stu) {
+  const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+  const who = id => (stu[id] ? stu[id].name + ' — ' + (stu[id].section || '') : id);
+  const term = (t, p) => 'الفصل ' + (+t + 1) + ' / الفترة ' + (+p + 1);
+  let p = String(key).split('|');
+  if (bucket === 'grades' || bucket === 'absences') { const [t, pp, w, d, id] = p; return [who(id), (bucket === 'grades' ? 'تسميع القرآن' : 'غياب') + ' — ' + term(t, pp) + ' — الأسبوع ' + (+w + 1) + ' ' + (DAYS[+d] || '')]; }
+  if (bucket === 'tests' || bucket === 'approvals') { const [t, pp, id] = p; return [who(id), (bucket === 'tests' ? 'اختبار القرآن' : 'اعتماد') + ' — ' + term(t, pp)]; }
+  if (bucket === 'holidays') { const [t, pp, w, d] = p; return ['—', 'إجازة — ' + term(t, pp) + ' — الأسبوع ' + (+w + 1) + ' ' + (DAYS[+d] || '')]; }
+  if (bucket === 'coursework') {
+    let star = false; if (p[0] === 'star') { star = true; p = p.slice(1); }
+    const [subj, t, pp, id, cat, i] = p;
+    return [who(id), fsBreakdownLabel(subj + '|' + cat) + ' — ' + term(t, pp) + ' — خانة ' + (+i + 1) + (star ? ' (نجمة)' : '')];
+  }
+  return ['—', (FS_FIELD_LABELS[bucket] || bucket) + ' ' + key];
+}
+function fsShowVal(v) { return v === undefined ? '—' : v === true ? '✓' : v === false ? '✗' : typeof v === 'object' ? 'بيانات' : String(v); }
+
+function fsReadableDiff(local, cloud, base) {
+  const rows = []; let count = 0, onlyLocal = 0, onlyCloud = 0, both = 0;
+  const same = (x, y) => fsCanon(x === undefined ? null : x) === fsCanon(y === undefined ? null : y);
+  const side = (bv, lv, cv) => {
+    if (!base) return 'غير معروف';
+    const l = !same(lv, bv), c = !same(cv, bv);
+    if (l && c) { both++; return 'الطرفان'; }
+    if (l) { onlyLocal++; return 'هذا الجهاز'; }
+    if (c) { onlyCloud++; return 'السحابة'; }
+    return '—';
+  };
+  const stu = {};
+  for (const s of [...(cloud.students || []), ...(local.students || [])]) stu[s.id] = s;
+  for (const b of ['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework']) {
+    const L = local[b] || {}, C = cloud[b] || {}, B = (base && base[b]) || {};
+    for (const k of new Set([...Object.keys(L), ...Object.keys(C)])) {
+      if (same(L[k], C[k])) continue;
+      count++;
+      const [who, what] = fsKeyDescribe(b, k, stu);
+      rows.push([who, what, fsShowVal(L[k]), fsShowVal(C[k]), side(B[k], L[k], C[k])]);
+    }
+  }
+  const byId = arr => Object.fromEntries((arr || []).map(s => [s.id, s]));
+  const Ls = byId(local.students), Cs = byId(cloud.students), Bs = byId(base && base.students);
+  for (const id of new Set([...Object.keys(Ls), ...Object.keys(Cs)])) {
+    if (same(Ls[id], Cs[id])) continue;
+    count++;
+    const s = Ls[id] || Cs[id];
+    rows.push([s.name + ' — ' + (s.section || ''), 'سجل الطالب (' + ((window.__app && window.__app.subjectNames && window.__app.subjectNames[s.subject]) || s.subject) + ')', Ls[id] ? (Cs[id] ? 'معدّل' : 'موجود') : '—', Cs[id] ? (Ls[id] ? 'معدّل' : 'موجود') : '—', side(Bs[id], Ls[id], Cs[id])]);
+  }
+  const lIds = (local.students || []).map(s => s.id), cIds = (cloud.students || []).map(s => s.id);
+  if (!same(lIds, cIds) && same([...lIds].sort(), [...cIds].sort())) {
+    count++; rows.push(['—', 'ترتيب الطلاب', 'مختلف', 'مختلف', side((base && base.students || []).map(s => s.id), (local.students || []).map(s => s.id), (cloud.students || []).map(s => s.id))]);
+  }
+  const skip = new Set(['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework', 'students', ...FS_UI_FIELDS]);
+  for (const f of new Set([...Object.keys(local), ...Object.keys(cloud)])) {
+    if (skip.has(f) || same(local[f], cloud[f])) continue;
+    if (f === 'studentSupport') {
+      const L = local[f] || {}, C = cloud[f] || {}, B = (base && base[f]) || {};
+      for (const uid of new Set([...Object.keys(L), ...Object.keys(C)])) {
+        if (same(L[uid], C[uid])) continue;
+        count++;
+        const s = (local.students || []).find(x => x.studentUid === uid) || (cloud.students || []).find(x => x.studentUid === uid);
+        rows.push([s ? s.name : uid, 'متابعة الطالب', L[uid] ? 'موجود' : '—', C[uid] ? 'موجود' : '—', side(B[uid], L[uid], C[uid])]);
+      }
+      continue;
+    }
+    if (f === 'auditLog') continue; // سجل التعديلات يتبع النسخة المعتمدة ولا يُعرض كفرق
+    count++;
+    rows.push(['—', FS_FIELD_LABELS[f] || f, fsShowVal(local[f]), fsShowVal(cloud[f]), side(base && base[f], local[f], cloud[f])]);
+  }
+  return { rows, count, onlyLocal, onlyCloud, both, hasBase: !!base };
+}
+
+async function fsShowConflict(ui, actions) {
+  actions.style.display = 'none';
+  ui.status.textContent = 'جارٍ مقارنة هذا الجهاز بالسحابة... لا يُكتب أي شيء.';
+  try {
+    const { stored: local, memMatches } = fsSourceDb();
+    if (!memMatches) throw new Error('أعد تحميل الصفحة ثم أعد المحاولة.');
+    const row = await fsFetchRow(FULL_ROW_ID);
+    if (!row || !row.db) throw new Error('لا توجد نسخة في السحابة.');
+    const base = await fsLoadBaseContent();
+    const d = fsReadableDiff(local, row.db, base);
+    ui.summary.replaceChildren();
+    const h = document.createElement('div');
+    const when = row.meta && row.meta.uploadedAt ? new Date(row.meta.uploadedAt).toLocaleString('ar-SA') : '—';
+    const dev = row.meta ? ({ ipad: 'الآيباد', laptop: 'اللابتوب' }[row.meta.deviceKind] || fsDeviceLabel(row.meta.device) || 'جهاز آخر') : '—';
+    h.innerHTML = '<b>الفروق بين هذا الجهاز والسحابة: ' + d.count + ' خانة</b><br><span class="muted">آخر رفع إلى السحابة: ' + escapeHtml(when) + ' من ' + escapeHtml(dev) + '</span>' +
+      (d.hasBase ? '<br>تغيّر على هذا الجهاز فقط: ' + d.onlyLocal + ' • في السحابة فقط: ' + d.onlyCloud + ' • على الطرفين: ' + d.both : '<br><span class="muted">(لا تتوفر نسخة آخر مزامنة على هذا الجهاز، فعمود «تغيّر في» غير معروف هذه المرة.)</span>');
+    ui.summary.appendChild(h);
+    if (d.count) {
+      const t = document.createElement('table'); t.style.cssText = 'width:100%;min-width:640px;margin-top:8px';
+      t.innerHTML = '<thead><tr><th>الطالب</th><th>الخانة</th><th>هذا الجهاز</th><th>السحابة</th><th>تغيّر في</th></tr></thead><tbody></tbody>';
+      for (const r of d.rows.slice(0, 400)) { const tr = document.createElement('tr'); for (const v of r) { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); } t.tBodies[0].appendChild(tr); }
+      ui.summary.appendChild(t);
+      if (d.rows.length > 400) { const m = document.createElement('p'); m.className = 'muted'; m.textContent = 'عُرضت أول 400 خانة من ' + d.rows.length + '.'; ui.summary.appendChild(m); }
+      actions.style.display = '';
+      ui.status.textContent = 'لم يُكتب شيء. راجع الجدول ثم اختر النسخة التي تعتمدها.';
+    } else {
+      ui.status.textContent = 'لا توجد فروق في الدرجات أو البيانات؛ سيُصلح هذا تلقائيًا.';
+      saveJSON(FS_BASE_KEY, { contentFp: row.meta.contentFp, fp: row.meta.fp, at: new Date().toISOString(), kind: 'match' });
+      fsSaveBaseContent(local);
+      fsBadge('✓ متزامن', 'ok');
+    }
+    fsSim.conflict = { cloudFp: row.meta.fp, localFp: fsFp(local) };
+  } catch (e) { ui.status.textContent = 'تعذّرت المقارنة: ' + e.message + ' (لم يُكتب شيء)'; }
+}
+
+async function fsKeepLocal(ui) {
+  const c = fsSim.conflict; if (!c) return;
+  try {
+    const { stored: local, memMatches } = fsSourceDb();
+    if (!memMatches || fsFp(local) !== c.localFp) throw new Error('تغيّرت بيانات هذا الجهاز؛ اعرض الفروق من جديد.');
+    if (!(local.syncMarks && local.syncMarks.islamicTestsReset)) throw new Error('هذا الجهاز لم يُكمل المزامنة الأولى؛ لا يمكن اعتماده.');
+    const current = await fsFetchRow(FULL_ROW_ID);
+    if (!current || current.meta.fp !== c.cloudFp) throw new Error('تغيّرت السحابة؛ اعرض الفروق من جديد.');
+    const typed = prompt('ستُعتمد نسخة هذا الجهاز كاملة وتُرفع إلى السحابة، ثم يستقبلها الجهاز الآخر.\nنسخة السحابة الحالية ستُحفظ في «سجل النسخ» ويمكن استعادتها.\nللمتابعة اكتب: اعتماد');
+    if ((typed || '').trim() !== 'اعتماد') { ui.status.textContent = 'أُلغي. لم يتغير شيء.'; return; }
+    const checks = [], check = (ok, label) => { checks.push({ ok: !!ok, label }); return ok; };
+    const plan = fsBuildPayload(local, new Date().toISOString());
+    fsVerifyPayload(local, plan, check);
+    if (plan.firstTransfer || !checks.every(x => x.ok)) throw new Error('فشل فحص سلامة: ' + checks.filter(x => !x.ok).map(x => x.label).join('، '));
+    ui.status.textContent = 'نسخة احتياطية...';
+    await fsMakeBackup('اعتماد-هذا-الجهاز', { full: current });
+    ui.status.textContent = 'حفظ نسخة السحابة الحالية في سجل النسخ...';
+    await fsSnapshotCloud(current, 'قبل اعتماد نسخة جهاز في تعارض', true);
+    const meta = fsMakeMeta(plan.payload, local, plan);
+    await fsPushPayload(plan.payload, meta, current, t => { ui.status.textContent = t; });
+    saveJSON(FS_BASE_KEY, { contentFp: meta.contentFp, fp: meta.fp, at: new Date().toISOString(), kind: 'keep-local' });
+    fsSaveBaseContent(plan.payload);
+    fsSim.conflict = null;
+    ui.status.textContent = '✓ اعتُمدت نسخة هذا الجهاز ورُفعت وتطابقت السحابة. افتح التطبيق على الجهاز الآخر ليستقبلها.';
+    fsBadge('✓ متزامن', 'ok');
+  } catch (e) { ui.status.textContent = 'توقف: ' + e.message; }
+}
+
+async function fsKeepCloud(ui) {
+  const c = fsSim.conflict; if (!c) return;
+  try {
+    const row = await fsFetchRow(FULL_ROW_ID);
+    if (!row || row.meta.fp !== c.cloudFp) throw new Error('تغيّرت السحابة؛ اعرض الفروق من جديد.');
+    const checks = [], check = (ok, label) => { checks.push({ ok: !!ok, label }); return ok; };
+    fsVerifyCloudRow(row, check);
+    if (!checks.every(x => x.ok)) throw new Error('نسخة السحابة لم تجتز فحص السلامة.');
+    const typed = prompt('ستُستبدل بيانات هذا الجهاز بنسخة السحابة كاملة.\nنسخة هذا الجهاز الحالية ستُحفظ كنسخة احتياطية (ملف + داخل المتصفح) ويمكن استعادتها.\nللمتابعة اكتب: اعتماد');
+    if ((typed || '').trim() !== 'اعتماد') { ui.status.textContent = 'أُلغي. لم يتغير شيء.'; return; }
+    const bk = await fsMakeBackup('اعتماد-السحابة', { full: row });
+    await fsReplaceLocal(row.db, 'receive', bk.id);
+  } catch (e) { ui.status.textContent = 'توقف: ' + e.message; }
+}
+
 // ============================================================
 // المزامنة التلقائية الآمنة
 // القاعدة: نقل كامل فقط، ولا يحدث تلقائيًا إلا إذا تغيّر طرف واحد منذ آخر مزامنة:
@@ -975,7 +1149,7 @@ async function fsAutoUpload(local, prevFull) {
   const meta = fsMakeMeta(plan.payload, local, plan);
   await fsPushPayload(plan.payload, meta, prevFull, null);
   // تأكد أن الجهاز لم يتغير أثناء الرفع؛ وإلا تُرفع التعديلات الأحدث في الدورة التالية
-  saveJSON(FS_BASE_KEY, { contentFp: meta.contentFp, fp: meta.fp, at: new Date().toISOString(), kind: 'auto-upload' });
+  saveJSON(FS_BASE_KEY, { contentFp: meta.contentFp, fp: meta.fp, at: new Date().toISOString(), kind: 'auto-upload' }); fsSaveBaseContent(plan.payload);
   if (fsFp(fsReadStoredDb()) !== fsFp(local)) fsAutoAgain = true; // عُدّل أثناء الرفع: تُرفع التعديلات الأحدث في الدورة التالية
   return 'uploaded';
 }
@@ -1017,7 +1191,8 @@ async function fsAutoRun(reason) {
     const lc = fsContentFp(local), cc = row.meta.contentFp;
     const localChanged = lc !== base.contentFp, cloudChanged = cc !== base.contentFp;
     if (lc === cc) {
-      if (localChanged || cloudChanged) saveJSON(FS_BASE_KEY, { contentFp: cc, fp: row.meta.fp, at: new Date().toISOString(), kind: 'match' });
+      if (localChanged || cloudChanged) { saveJSON(FS_BASE_KEY, { contentFp: cc, fp: row.meta.fp, at: new Date().toISOString(), kind: 'match' }); fsSaveBaseContent(local); }
+      else fsLoadBaseContent().then(b => { if (!b) fsSaveBaseContent(local); });
       fsBadge('✓ متزامن', 'ok'); return;
     }
     if (localChanged && !cloudChanged) {
@@ -1033,7 +1208,7 @@ async function fsAutoRun(reason) {
       await fsAutoReceive(local);
       return;
     }
-    fsBadge('⚠ تعارض: عُدّل هذا الجهاز وجهاز آخر قبل المزامنة. لم يُكتب شيء — افتح «مزامنة الأجهزة»', 'err');
+    fsBadge('⚠ تعارض: عُدّل هذا الجهاز وجهاز آخر قبل المزامنة. لم يُكتب شيء — اضغط هنا ثم «عرض الفروق»', 'err');
   } catch (e) {
     fsBadge('توقفت المزامنة التلقائية دون أي تغيير: ' + e.message, 'err');
   } finally {
