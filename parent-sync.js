@@ -1093,11 +1093,12 @@ async function fsKeepCloud(ui) {
 
 
 // ============================================================
-// التقرير الأسبوعي للقرآن: خطط علاجية (أقل من 35٪) وخطابات شكر (الدرجة الكاملة دون غياب)
+// التقرير الأسبوعي للقرآن: يُحسب على أيام الحفظ (الأحد–الأربعاء) فقط؛ خطط علاجية (أقل من 40٪) وخطابات شكر (الدرجة الكاملة دون غياب)
 // يُراجعها المعلم ويعدّلها، ولا يُرسَل شيء إلا بعد ضغط «اعتماد وإرسال».
 // تُسجَّل الإرسالات داخل البيانات (db.weeklyNotices) فتنتقل للجهاز الآخر ولا تتكرر.
 // ============================================================
-const WN_THRESHOLD = 35;
+const WN_THRESHOLD = 40;
+const WN_HIFZ_DAYS = [0, 1, 2, 3]; // أيام الحفظ: الأحد إلى الأربعاء؛ الخميس تلاوة ولا يُحتسب
 const WN_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 const WN_WEEKS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع'];
 const WN_DAY_MAX = 7;
@@ -1109,7 +1110,7 @@ function wnTag(t, p, w) { return [t, p, w].join('|'); }
 function wnCompute(t, p, w) {
   const app = window.__app, db = app.db;
   const out = { remedial: [], thanks: [], incomplete: [], middle: 0, reqDays: [] };
-  out.reqDays = [0, 1, 2, 3, 4].filter(d => !(w === 6 && d === 4) && !db.holidays[[t, p, w, d].join('|')]);
+  out.reqDays = WN_HIFZ_DAYS.filter(d => !(w === 6 && d === 4) && !db.holidays[[t, p, w, d].join('|')]);
   if (!out.reqDays.length) return out;
   const qs = db.students.filter(s => (s.subject || 'quran') === 'quran' && (s.status || 'active') === 'active');
   for (const s of qs) {
@@ -1135,8 +1136,8 @@ function wnCompute(t, p, w) {
 function wnRemedialText(it, label) {
   const avg = it.graded ? (it.sum / it.graded) : 0;
   const needs = [];
-  if (it.abs) needs.push('• الالتزام بالحضور: غاب ' + it.abs + (it.abs === 1 ? ' يومًا' : ' أيام') + ' هذا الأسبوع، وكل غياب يُفقده درجة التسميع لذلك اليوم.');
-  if (it.graded && avg < 3.5) needs.push('• تقوية الحفظ قبل الحصة: متوسط درجته في أيام التسميع ' + avg.toFixed(1) + ' من ' + WN_DAY_MAX + '.');
+  if (it.abs) needs.push('• الالتزام بالحضور: غاب ' + it.abs + (it.abs === 1 ? ' يومًا' : ' أيام') + ' من أيام الحفظ هذا الأسبوع، وكل غياب يُفقده درجة الحفظ لذلك اليوم.');
+  if (it.graded && avg < 3.5) needs.push('• تقوية الحفظ قبل الحصة: متوسط درجته في أيام الحفظ ' + avg.toFixed(1) + ' من ' + WN_DAY_MAX + '.');
   else if (it.graded) needs.push('• المحافظة على مستوى التسميع في الأيام التي حضرها، مع تعويض ما فاته.');
   const plan = [
     'تسميع المقطع المقرر لابنكم في البيت يوميًا قبل يوم الحصة (10 إلى 15 دقيقة).',
@@ -1147,8 +1148,8 @@ function wnRemedialText(it, label) {
   return ['الخطة العلاجية الأسبوعية — القرآن الكريم',
     'الطالب: ' + it.name + ' — ' + it.section,
     label,
-    'نتيجة الأسبوع: ' + it.sum + ' من ' + it.max + ' (' + Math.round(it.pct) + '٪)، وهي دون الحد المطلوب ' + WN_THRESHOLD + '٪.',
-    'تفاصيل الأيام: ' + it.cells.join('، ') + '.',
+    'نتيجة أيام الحفظ (الأحد إلى الأربعاء): ' + it.sum + ' من ' + it.max + ' (' + Math.round(it.pct) + '٪)، وهي دون الحد المطلوب ' + WN_THRESHOLD + '٪.',
+    'تفاصيل أيام الحفظ: ' + it.cells.join('، ') + '.',
     '',
     'ما يحتاجه ابنكم:',
     ...needs,
@@ -1163,7 +1164,7 @@ function wnRemedialText(it, label) {
 function wnThanksText(it, label) {
   return ['خطاب شكر وعرفان',
     'نتقدم بالشكر والتقدير لابنكم الطالب ' + it.name + ' (' + it.section + ')',
-    'على إتمامه تسميع ' + label.replace(/^.*— الأسبوع /, 'الأسبوع ') + ' كاملًا بالدرجة الكاملة (' + it.sum + ' من ' + it.max + ') دون أي غياب.',
+    'على إتمامه حفظ ' + label.replace(/^.*— الأسبوع /, 'الأسبوع ') + ' كاملًا بالدرجة الكاملة (' + it.sum + ' من ' + it.max + ') دون أي غياب في أيام الحفظ.',
     'ونشكر لكم حرصكم ومتابعتكم، فهذا ثمرة جهدكم معه.',
     'نسأل الله أن يجعله من أهل القرآن الذين هم أهل الله وخاصته.',
     '',
@@ -1188,7 +1189,7 @@ function wnRender(host) {
   const app = window.__app; if (!app || !host) return;
   const a = app.db.actual;
   host.innerHTML = `<div class="summary-card"><details id="wnDetails" open><summary><b>التقرير الأسبوعي: الخطط العلاجية وخطابات الشكر (القرآن الكريم)</b></summary>
-    <p class="muted">خطة علاجية لمن نتيجته في الأسبوع أقل من ${WN_THRESHOLD}٪، وخطاب شكر لمن أتم الأسبوع بالدرجة الكاملة دون غياب. راجع الكشفين وعدّل النص إن شئت؛ لا يُرسل شيء قبل «اعتماد وإرسال».</p>
+    <p class="muted">يُحسب على أيام الحفظ فقط (الأحد إلى الأربعاء)، ولا يُحتسب الخميس لأنه تلاوة. خطة علاجية لمن نتيجته أقل من ${WN_THRESHOLD}٪، وخطاب شكر لمن أتم أيام الحفظ بالدرجة الكاملة دون غياب. راجع الكشفين وعدّل النص إن شئت؛ لا يُرسل شيء قبل «اعتماد وإرسال».</p>
     <label>الفصل <select id="wnT"><option value="0">الأول</option><option value="1">الثاني</option></select></label>
     <label>الفترة <select id="wnP"><option value="0">الأولى</option><option value="1">الثانية</option></select></label>
     <label>الأسبوع <select id="wnW">${WN_WEEKS.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select></label>
@@ -1204,13 +1205,13 @@ async function wnBuild(host) {
   const out = host.querySelector('#wnOut');
   out.textContent = 'جارٍ التجهيز...';
   const r = wnCompute(t, p, w), label = wnWeekLabel(t, p, w), tag = wnTag(t, p, w);
-  if (!r.reqDays.length) { out.textContent = 'لا توجد أيام تسميع مطلوبة في هذا الأسبوع (إجازة أو اختبار).'; return; }
+  if (!r.reqDays.length) { out.textContent = 'لا توجد أيام حفظ محتسبة في هذا الأسبوع (إجازة).'; return; }
   wnState.links = await wnLoadLinks();
   const sent = db.weeklyNotices || {};
   wnState.items = {}; wnState.week = { t, p, w, label, tag };
   out.replaceChildren();
   const sum = document.createElement('p');
-  sum.innerHTML = '<b>' + escapeHtml(label) + '</b> — أيام التسميع المطلوبة: ' + r.reqDays.map(d => WN_DAYS[d]).join('، ') +
+  sum.innerHTML = '<b>' + escapeHtml(label) + '</b> — أيام الحفظ المحتسبة: ' + r.reqDays.map(d => WN_DAYS[d]).join('، ') +
     '<br>خطط علاجية: <b>' + r.remedial.length + '</b> • خطابات شكر: <b>' + r.thanks.length + '</b> • بين ذلك: ' + r.middle + ' • لم يكتمل رصدهم: ' + r.incomplete.length +
     (wnState.links ? '' : '<br><span style="color:#b42318">تعذّرت معرفة أولياء الأمور المرتبطين (سجّل الدخول من «بوابة أولياء الأمور»). يمكنك المراجعة والطباعة الآن، والإرسال بعد تسجيل الدخول.</span>');
   out.appendChild(sum);
@@ -1244,7 +1245,7 @@ async function wnBuild(host) {
     out.appendChild(tb);
   };
   table('كشف الخطط العلاجية (أقل من ' + WN_THRESHOLD + '٪)', r.remedial, 'remedial');
-  table('كشف خطابات الشكر والعرفان (الدرجة الكاملة دون غياب)', r.thanks, 'thanks');
+  table('كشف خطابات الشكر والعرفان (الدرجة الكاملة في أيام الحفظ دون غياب)', r.thanks, 'thanks');
   const bar = document.createElement('div'); bar.style.marginTop = '10px';
   const send = document.createElement('button'); send.type = 'button'; send.textContent = 'اعتماد وإرسال المحدد إلى أولياء الأمور';
   const pr = document.createElement('button'); pr.type = 'button'; pr.textContent = 'طباعة الكشفين';
