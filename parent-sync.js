@@ -1208,6 +1208,7 @@ async function wnBuild(host) {
   if (!r.reqDays.length) { out.textContent = 'لا توجد أيام حفظ محتسبة في هذا الأسبوع (إجازة).'; return; }
   wnState.links = await wnLoadLinks();
   const sent = db.weeklyNotices || {};
+  const receipts = await wnLoadReceipts(Object.entries(sent).filter(([k]) => k.startsWith(tag + '|')).flatMap(([, v]) => v.ids || []));
   wnState.items = {}; wnState.week = { t, p, w, label, tag };
   out.replaceChildren();
   const sum = document.createElement('p');
@@ -1215,6 +1216,14 @@ async function wnBuild(host) {
     '<br>خطط علاجية: <b>' + r.remedial.length + '</b> • خطابات شكر: <b>' + r.thanks.length + '</b> • بين ذلك: ' + r.middle + ' • لم يكتمل رصدهم: ' + r.incomplete.length +
     (wnState.links ? '' : '<br><span style="color:#b42318">تعذّرت معرفة أولياء الأمور المرتبطين (سجّل الدخول من «بوابة أولياء الأمور»). يمكنك المراجعة والطباعة الآن، والإرسال بعد تسجيل الدخول.</span>');
   out.appendChild(sum);
+  const sentHere = Object.entries(sent).filter(([k]) => k.startsWith(tag + '|')).map(([, v]) => v);
+  if (sentHere.length) {
+    const st = { read: 0, ack: 0, none: 0 };
+    for (const v of sentHere) { const s = wnReceiptState(v, receipts); st[s]++; }
+    const rs = document.createElement('p');
+    rs.innerHTML = 'الاستلام لهذا الأسبوع: أُرسل ' + sentHere.length + ' • أقرّ بالاطلاع <b>' + st.ack + '</b> • قرأ فقط <b>' + st.read + '</b> • <span style="color:#b42318">لم يقرأ بعد <b>' + st.none + '</b></span>';
+    out.appendChild(rs);
+  }
   if (r.incomplete.length) {
     const inc = document.createElement('details');
     inc.innerHTML = '<summary style="color:#7a5600">طلاب لم يكتمل رصد أسبوعهم (' + r.incomplete.length + ') — أكمل رصدهم ثم أعد التجهيز</summary>';
@@ -1226,7 +1235,7 @@ async function wnBuild(host) {
     const h = document.createElement('h4'); h.textContent = title + ' (' + list.length + ')'; out.appendChild(h);
     if (!list.length) { const m = document.createElement('p'); m.className = 'muted'; m.textContent = 'لا يوجد.'; out.appendChild(m); return; }
     const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:760px';
-    tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>الطالب</th><th>النتيجة</th><th>ولي الأمر</th><th>النص الذي سيُرسل (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+    tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>الطالب</th><th>النتيجة</th><th>ولي الأمر والاستلام</th><th>النص الذي سيُرسل (يمكن تعديله)</th></tr></thead><tbody></tbody>';
     for (const it of list) {
       const id = type + '|' + it.uid, doneKey = tag + '|' + it.uid + '|' + type, already = sent[doneKey];
       const parents = wnState.links ? (wnState.links.get(it.uid) || []) : null;
@@ -1237,7 +1246,8 @@ async function wnBuild(host) {
       c0.appendChild(cb);
       const c1 = document.createElement('td'); c1.textContent = it.name + ' — ' + it.section;
       const c2 = document.createElement('td'); c2.textContent = it.sum + ' / ' + it.max + ' (' + Math.round(it.pct) + '٪)' + (it.abs ? ' — غياب ' + it.abs : '');
-      const c3 = document.createElement('td'); c3.textContent = already ? '✓ أُرسل ' + new Date(already.at).toLocaleDateString('ar-SA') : parents === null ? 'غير معروف' : parents.length ? 'مرتبط' : 'لا يوجد ولي أمر مرتبط';
+      const c3 = document.createElement('td'); c3.style.whiteSpace = 'pre-line';
+      c3.textContent = already ? wnReceiptText(already, receipts) : parents === null ? 'غير معروف' : parents.length ? 'مرتبط — لم يُرسل بعد' : 'لا يوجد ولي أمر مرتبط (اطبع الخطاب للتوقيع)';
       const c4 = document.createElement('td'), ta = document.createElement('textarea'); ta.value = text; ta.rows = type === 'remedial' ? 9 : 5; ta.style.cssText = 'width:100%;min-width:320px;font:13px Tahoma'; c4.appendChild(ta);
       tr.append(c0, c1, c2, c3, c4); tb.tBodies[0].appendChild(tr);
       wnState.items[id] = { it, type, cb, ta, parents, doneKey };
@@ -1254,6 +1264,33 @@ async function wnBuild(host) {
   bar.append(send, document.createTextNode(' '), pr, st); out.appendChild(bar);
 }
 
+
+async function wnLoadReceipts(ids) {
+  const m = new Map(); if (!ids.length || !wnState.links) return m;
+  try {
+    let { data, error } = await supa.from('parent_messages').select('id,read_at,acknowledged_at').in('id', ids);
+    if (error) ({ data, error } = await supa.from('parent_messages').select('id,read_at').in('id', ids));
+    for (const r of data || []) m.set(String(r.id), r);
+  } catch (_) {}
+  return m;
+}
+function wnReceiptState(v, receipts) {
+  const rs = (v.ids || []).map(id => receipts.get(String(id))).filter(Boolean);
+  if (rs.some(r => r.acknowledged_at)) return 'ack';
+  if (rs.some(r => r.read_at)) return 'read';
+  return 'none';
+}
+function wnReceiptText(v, receipts) {
+  const rs = (v.ids || []).map(id => receipts.get(String(id))).filter(Boolean);
+  const fmt = x => new Date(x).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
+  let t = '✓ أُرسل ' + fmt(v.at);
+  const ack = rs.map(r => r.acknowledged_at).filter(Boolean).sort()[0], rd = rs.map(r => r.read_at).filter(Boolean).sort()[0];
+  if (ack) t += '\n✓ أقرّ بالاطلاع ' + fmt(ack);
+  else if (rd) t += '\n✓ قرأها ' + fmt(rd) + ' (لم يضغط «اطّلعت»)';
+  else t += '\n✗ لم يقرأها بعد (منذ ' + Math.max(1, Math.round((Date.now() - new Date(v.at)) / 3600000)) + ' ساعة)';
+  return t;
+}
+
 async function wnSend(host, st) {
   const app = window.__app, db = app.db;
   const chosen = Object.values(wnState.items).filter(x => x.cb.checked && !x.cb.disabled);
@@ -1266,11 +1303,13 @@ async function wnSend(host, st) {
   for (const x of chosen) {
     const body = x.ta.value.trim(); if (!body) continue;
     let good = true;
+    const ids = [];
     for (const pu of x.parents || []) {
-      const { error } = await supa.from('parent_messages').insert({ student_id: x.it.uid, parent_uid: pu, sender_role: 'teacher', body });
+      const { data, error } = await supa.from('parent_messages').insert({ student_id: x.it.uid, parent_uid: pu, sender_role: 'teacher', body }).select('id');
       if (error) { good = false; break; }
+      for (const r of (Array.isArray(data) ? data : data ? [data] : [])) if (r && r.id !== undefined) ids.push(String(r.id));
     }
-    if (good && (x.parents || []).length) { db.weeklyNotices[x.doneKey] = { at: new Date().toISOString(), type: x.type }; ok++; } else fail++;
+    if (good && (x.parents || []).length) { db.weeklyNotices[x.doneKey] = { at: new Date().toISOString(), type: x.type, ids }; ok++; } else fail++;
     st.textContent = 'جارٍ الإرسال... ' + (ok + fail) + ' من ' + chosen.length;
   }
   app.save();
@@ -1286,9 +1325,9 @@ function wnPrint() {
     if (!list.length) return '<h2>' + title + '</h2><p>لا يوجد.</p>';
     return '<h2>' + title + ' (' + list.length + ')</h2><table><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>النتيجة</th></tr>' +
       list.map((x, i) => '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(x.it.name) + '</td><td>' + escapeHtml(x.it.section) + '</td><td>' + x.it.sum + ' / ' + x.it.max + ' (' + Math.round(x.it.pct) + '٪)</td></tr>').join('') + '</table>' +
-      list.map(x => '<div class="letter"><pre>' + escapeHtml(x.ta.value) + '</pre></div>').join('');
+      list.map(x => '<div class="letter"><pre>' + escapeHtml(x.ta.value) + '</pre><p class="sig">اسم ولي الأمر: ........................ التوقيع: ................ تاريخ الاطلاع: ..../..../........</p></div>').join('');
   };
-  const html = '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>' + escapeHtml(w.label) + '</title><style>body{font:14px Tahoma;margin:24px}table{border-collapse:collapse;width:100%;margin-bottom:16px}td,th{border:1px solid #999;padding:5px}h1{font-size:18px}h2{font-size:16px;margin-top:24px}.letter{page-break-inside:avoid;border:1px solid #ccc;border-radius:8px;padding:10px;margin:10px 0}pre{white-space:pre-wrap;font:14px Tahoma;margin:0}</style></head><body><h1>التقرير الأسبوعي — القرآن الكريم — ' + escapeHtml(w.label) + '</h1>' +
+  const html = '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>' + escapeHtml(w.label) + '</title><style>body{font:14px Tahoma;margin:24px}table{border-collapse:collapse;width:100%;margin-bottom:16px}td,th{border:1px solid #999;padding:5px}h1{font-size:18px}h2{font-size:16px;margin-top:24px}.letter{page-break-inside:avoid;border:1px solid #ccc;border-radius:8px;padding:10px;margin:10px 0}.sig{margin-top:14px;border-top:1px dashed #999;padding-top:8px}pre{white-space:pre-wrap;font:14px Tahoma;margin:0}</style></head><body><h1>التقرير الأسبوعي — القرآن الكريم — ' + escapeHtml(w.label) + '</h1>' +
     block('remedial', 'كشف الخطط العلاجية') + block('thanks', 'كشف خطابات الشكر والعرفان') + '<script>window.onload=function(){window.print()}<\/script></body></html>';
   const win = window.open('', '_blank'); if (!win) { alert('اسمح بالنوافذ المنبثقة للطباعة.'); return; }
   win.document.write(html); win.document.close();
@@ -1727,7 +1766,8 @@ async function renderTeacherMessages(root){
       const mine=m.sender_role==='teacher';
       const bubble=document.createElement('div');
       bubble.style.cssText=`margin:6px 0;padding:8px 10px;border-radius:10px;max-width:82%;${mine?'margin-right:auto;background:#dfeee8':'margin-left:auto;background:#fff;border:1px solid #d6e3dd'}`;
-      bubble.innerHTML=`<div>${msgSafe(m.body)}</div><div class="muted" style="font-size:11px;margin-top:4px">${mine?'المعلم':'ولي الأمر'} — ${msgTime(m.created_at)}</div>`;
+      const receipt=mine?(m.acknowledged_at?' — ✓ أقرّ ولي الأمر بالاطلاع '+msgTime(m.acknowledged_at):m.read_at?' — ✓ قرأها '+msgTime(m.read_at):' — لم تُقرأ بعد'):'';
+      bubble.innerHTML=`<div style="white-space:pre-wrap;line-height:1.8">${msgSafe(m.body)}</div><div class="muted" style="font-size:11px;margin-top:4px">${mine?'المعلم':'ولي الأمر'} — ${msgTime(m.created_at)}${receipt}</div>`;
       chat.appendChild(bubble);
     }
     chat.scrollTop=chat.scrollHeight;

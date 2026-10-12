@@ -1,106 +1,144 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>بوابة ولي الأمر — سجل درجات الطلاب</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  body{font:16px Tahoma,Arial;background:#f4f7f5;color:#193d34;margin:0;padding:20px}
-  header{background:#205348;color:#fff;padding:18px 20px;border-radius:12px;margin-bottom:16px}
-  section{background:#fff;border:1px solid #d6e3dd;border-radius:10px;padding:16px;margin:12px 0;max-width:640px}
-  button,input{font:inherit;padding:9px;margin:4px 0;border:1px solid #aac1b4;border-radius:7px;width:100%;box-sizing:border-box}
-  button{cursor:pointer;background:#205348;color:#fff;border-color:#205348}
-  button.secondary{background:#fff;color:#205348}
-  .muted{font-size:13px;color:#526b60}
-  .error{color:#b42318;font-weight:bold}
-  .card{background:#f7faf8;border:1px solid #d6e3dd;border-radius:9px;padding:12px;margin:10px 0}
-  table{border-collapse:collapse;width:100%;margin-top:8px}
-  th,td{border:1px solid #d6e3dd;padding:6px;text-align:center;font-size:14px}
-  th{background:#e9f1ed}
-  h3{margin-top:0}
+  :root{
+    --green:#1f5a4c; --green-dark:#173f36; --ink:#17322b; --muted:#5b7068; --line:#d9e5df;
+    --bg:#f3f6f4; --card:#fff; --soft:#f7faf8;
+    --good:#1d6b43; --good-bg:#eaf6ef; --mid:#8a6400; --mid-bg:#fff6df; --need:#a43b1c; --need-bg:#fdeee8;
+    --radius:14px; --pad:clamp(14px,3.5vw,22px);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.75 "IBM Plex Sans Arabic","Segoe UI",Tahoma,"Geeza Pro",Arial,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+  .wrap{max-width:920px;margin:0 auto;padding:0 12px}
+  header{background:var(--green);color:#fff;padding:calc(18px + env(safe-area-inset-top)) 16px 18px;margin-bottom:12px}
+  header h1{margin:0;font-size:1.35rem;font-weight:700}
+  header p{margin:2px 0 0;color:#d9ece5;font-size:.95rem}
+  section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:var(--pad);margin:12px 0}
+  h2{font-size:1.3rem;margin:0 0 4px;line-height:1.5}
+  h3{font-size:1.1rem;margin:0 0 10px;line-height:1.5}
+  h4{font-size:1rem;margin:14px 0 6px}
+  p{margin:6px 0}
+  .muted{color:var(--muted);font-size:.92rem}
+  .error{color:var(--need);font-weight:700}
+  button,input,select,textarea{font:inherit;color:inherit}
+  input,textarea,select{width:100%;padding:11px 12px;border:1px solid #b9cdc3;border-radius:10px;background:#fff;margin:5px 0}
+  textarea{resize:vertical;line-height:1.7}
+  button{cursor:pointer;width:100%;padding:12px 14px;margin:5px 0;border-radius:10px;border:1px solid var(--green);background:var(--green);color:#fff;font-weight:500;min-height:46px}
+  button.secondary{background:#fff;color:var(--green)}
+  button:disabled{opacity:.6;cursor:default}
+  .num{direction:ltr;unicode-bidi:isolate;display:inline-block}
+  .card{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:var(--pad);margin:12px 0}
+  .card.good{background:var(--good-bg);border-color:#bfe0cc}
+  .card.warn{background:var(--mid-bg);border-color:#ecd28f}
+  .plan{white-space:pre-wrap;line-height:1.9}
+  .new-pill{background:#b3261e;color:#fff;border-radius:999px;padding:1px 9px;font-size:.78rem;vertical-align:middle;font-weight:500}
+
+  /* أزرار التبديل */
   .tabs{display:flex;gap:8px;margin-bottom:10px}
-  .tabs button{width:auto;flex:1}
-  .tabs button.active{background:#193d34}
+  .tabs button{flex:1}
+  .tabs button.active,.seg button.active{background:var(--green-dark);color:#fff}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+  .seg{grid-column:1/-1;display:flex;gap:8px}
+  .seg button{flex:1;background:#fff;color:var(--green);margin:0}
+  .controls label{display:block;font-size:.92rem;color:var(--muted)}
+  .controls select{margin-top:2px}
 
-  .chat{max-height:320px;overflow:auto;background:#f7faf8;border:1px solid #d6e3dd;border-radius:9px;padding:8px;margin-top:8px}
-  .bubble{padding:8px 10px;border-radius:10px;margin:6px 0;max-width:84%;word-break:break-word}
-  .bubble.parent{margin-right:auto;background:#dfeee8}
-  .bubble.teacher{margin-left:auto;background:#fff;border:1px solid #d6e3dd}
-  textarea{font:inherit;padding:9px;border:1px solid #aac1b4;border-radius:7px;width:100%;box-sizing:border-box;resize:vertical}
+  /* المستوى */
+  .lvl{display:inline-block;padding:2px 12px;border-radius:999px;font-weight:700;font-size:.95rem}
+  .lvl.good{background:var(--good-bg);color:var(--good)}
+  .lvl.mid{background:var(--mid-bg);color:var(--mid)}
+  .lvl.need{background:var(--need-bg);color:var(--need)}
+  .lvl.none{background:#eef2f0;color:var(--muted)}
+  .overall{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .overall .big{font-size:1.6rem;font-weight:700}
+  .bar{height:10px;border-radius:99px;background:#e4ece8;overflow:hidden;margin:8px 0 2px}
+  .bar>i{display:block;height:100%;background:var(--green);border-radius:99px}
+  .subjects{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:10px;margin-top:12px}
+  .subject{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .subject h4{margin:0 0 6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .subject p{margin:4px 0;font-size:.95rem}
 
-  .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin:10px 0}
-  .metric{background:#fff;border:1px solid #d6e3dd;border-radius:8px;padding:9px;text-align:center}
-  .metric b{display:block;font-size:19px;margin-top:4px}
-  .daily-wrap{overflow:auto;max-height:520px}.daily-table{min-width:760px}
-  .plan{white-space:pre-wrap;line-height:1.8}
-  .warning-card{background:#fff8ed;border-color:#e7c98b}
-  .good-card{background:#f3fbf6;border-color:#b9ddc5}
-  details.card>summary{cursor:pointer;font-weight:bold}
+  /* مؤشرات الموسع */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;margin:8px 0}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+  .stat span{display:block;font-size:.88rem;color:var(--muted);line-height:1.5}
+  .stat b{display:block;font-size:1.15rem;margin-top:2px}
+  .dist{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;font-size:.92rem}
+  .dist .bar{margin:0}
 
-.report-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}.report-controls button.active{background:#1e5b4e;color:#fff}.hidden-view{display:none!important}.rank-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.badge-good,.badge-need{display:inline-block;padding:5px 9px;border-radius:999px;margin:3px}.badge-good{background:#e8f6ed}.badge-need{background:#fff1e8}.new-pill{background:#b3261e;color:#fff;border-radius:999px;padding:2px 7px;font-size:12px}.timeline{border-right:3px solid #d6e3dd;padding-right:12px}.timeline-item{padding:7px;margin:6px 0;background:#fff;border-radius:8px}
+  /* السجل اليومي على شكل أسابيع */
+  .weeks{display:grid;gap:8px}
+  .week{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+  .week b{display:block;margin-bottom:6px}
+  .days{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+  .day{border-radius:8px;padding:6px 2px;text-align:center;font-size:.85rem;line-height:1.4;background:#f1f5f3}
+  .day small{display:block;color:var(--muted);font-size:.75rem}
+  .day.full{background:var(--good-bg)} .day.low{background:var(--need-bg)} .day.abs{background:#ececec;color:#555} .day.none{background:#f7f7f7;color:#999}
+  table{border-collapse:collapse;width:100%;margin-top:8px;font-size:.92rem}
+  th,td{border:1px solid var(--line);padding:7px 6px;text-align:center;vertical-align:middle}
+  th{background:#edf4f0;font-weight:500}
+  .tbl{overflow-x:auto}
+  ul.clean{margin:6px 0;padding-inline-start:20px}
+  ul.clean li{margin:3px 0}
+  .badge-good,.badge-need{display:inline-block;padding:3px 11px;border-radius:999px;margin:3px 0 3px 4px;font-size:.92rem}
+  .badge-good{background:var(--good-bg);color:var(--good)} .badge-need{background:var(--need-bg);color:var(--need)}
+  details>summary{cursor:pointer;font-weight:700;padding:4px 0}
 
-.teacher-followup{background:#fff;border:2px solid #aac1b4}.teacher-followup label{display:block;font-weight:bold;margin-top:10px}.teacher-followup input,.teacher-followup textarea,.teacher-followup select{width:100%;box-sizing:border-box;margin-top:5px}.teacher-followup .checkline{display:flex;gap:8px;align-items:center}.teacher-followup .checkline input{width:auto}.teacher-followup-actions{display:flex;gap:8px}.teacher-followup-actions button{width:auto}.save-ok{font-weight:bold;color:#17633f}
+  /* هذا الأسبوع والإقرار */
+  .weekly{border:2px solid var(--green)}
+  .weekly .meta{font-size:.88rem;color:var(--muted)}
+  .ack-done{color:var(--good);font-weight:700}
 
-.report-view{border:2px solid #205348;border-radius:12px;padding:14px;margin:12px 0;background:#fff}.report-view-title{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.report-controls button{width:auto!important;min-width:135px}.report-controls select{font:inherit;padding:7px;border:1px solid #aac1b4;border-radius:7px}.teacher-followup{scroll-margin-top:12px}
+  /* المحادثة */
+  .chat{max-height:380px;overflow:auto;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:8px}
+  .bubble{padding:9px 12px;border-radius:12px;margin:7px 0;max-width:88%;word-break:break-word}
+  .bubble .body{white-space:pre-wrap;line-height:1.8}
+  .bubble .when{font-size:.75rem;color:var(--muted);margin-top:4px}
+  .bubble.parent{margin-right:auto;background:#dcefe7}
+  .bubble.teacher{margin-left:auto;background:#fff;border:1px solid var(--line)}
 
-.subject-level-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:12px}
-.subject-level-card{border:1px solid #cfded7;border-radius:12px;padding:12px;background:#fff}
-.subject-level-card h4{margin:0 0 8px}
-.subject-level-main{font-weight:800;font-size:1.15rem;margin:5px 0}
-.subject-level-score{font-weight:700;margin:5px 0}
-.overall-level{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px;border:1px solid #cfded7;border-radius:12px;background:#fff}
-.overall-level b{font-size:1.25rem}
+  /* لوحة المعلم (المعاينة فقط) */
+  .teacher-followup{background:#fff;border:2px solid #aac1b4}
+  .teacher-followup label{display:block;font-weight:700;margin-top:10px}
+  .teacher-followup .checkline{display:flex;gap:8px;align-items:center}
+  .teacher-followup .checkline input{width:auto}
+  .save-ok{font-weight:700;color:var(--good)}
+  #renameStudentBtn{width:auto;display:inline-block;min-height:auto;padding:6px 14px;font-size:.9rem;margin-inline-start:8px}
 
-/* ===== تحسين العرض العريض لملف الطالب — مبني على الحزمة الأخيرة المرفوعة فقط ===== */
-:root{--page-pad:clamp(14px,2.2vw,34px);--panel-gap:clamp(12px,1.5vw,22px)}
-html,body{width:100%;max-width:none;margin:0}
-body{overflow-x:hidden;padding:0!important}
-header{width:auto;margin:24px var(--page-pad) 18px!important;border-radius:18px!important;padding:22px clamp(18px,3vw,42px)!important}
-section{width:auto!important;max-width:none!important;box-sizing:border-box;margin:14px var(--page-pad)!important;padding:clamp(16px,2vw,30px)!important;border-radius:16px!important}
-#reportsBox,#authBox{width:100%!important;max-width:none!important;margin:0!important}
-#reportsBox>section{width:auto!important;max-width:none!important;margin:14px var(--page-pad)!important}
-#reportsBox>section>h2{font-size:clamp(1.55rem,2.3vw,2.35rem);margin:0 0 14px}
-.card{box-sizing:border-box;width:100%;margin:var(--panel-gap) 0;padding:clamp(16px,1.8vw,26px);border-radius:16px}
-.report-controls{display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap;width:100%;box-sizing:border-box;padding:14px 16px;margin:14px 0 20px;border:1px solid #d5e2dc;border-radius:14px;background:#f8fbf9}
-.report-controls>b{font-size:1.05rem}
-.report-controls button{width:auto!important;min-width:170px;min-height:46px;padding:8px 20px}
-.report-controls label{display:flex;align-items:center;gap:8px;margin:0}
-.report-controls select{min-width:120px}
-.summary-grid,.subject-level-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:var(--panel-gap)!important}
-.subject-level-card,.metric{min-width:0}
-.overall-level{display:grid!important;grid-template-columns:minmax(220px,1fr) auto auto;gap:18px;align-items:center}
-table{width:100%;max-width:100%}
-#teacherFollowupMount{width:100%}
-button#renameStudentBtn{width:auto!important;min-width:150px!important;display:inline-flex!important;margin-inline-start:12px!important;padding:8px 18px!important;font-size:.95rem!important;vertical-align:middle}
-@media(max-width:1100px){
- .summary-grid,.subject-level-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
-}
-@media(max-width:700px){
- :root{--page-pad:10px}
- header{margin:0 0 12px!important;border-radius:0!important;padding:18px 14px!important}
- section,#reportsBox>section{margin:10px!important;padding:12px!important}
- .summary-grid,.subject-level-grid{grid-template-columns:1fr!important}
- .overall-level{grid-template-columns:1fr!important}
- .report-controls{align-items:stretch}
- .report-controls button,.report-controls label,.report-controls select{width:100%!important}
- button#renameStudentBtn{display:block!important;margin:10px 0 0!important;width:100%!important}
-}
-@media print{
- header,.report-controls,#renameStudentBtn,#teacherFollowupMount{display:none!important}
- section,#reportsBox>section{margin:0!important;width:100%!important;max-width:none!important;padding:0!important}
- .card{break-inside:avoid}
-}
-
+  @media (min-width:700px){
+    body{font-size:16px}
+    .controls{grid-template-columns:2fr 1fr 1fr}
+    .seg{grid-column:auto}
+    header{border-radius:0 0 18px 18px}
+    button{width:auto}
+    .tabs button,.seg button,.send-msg{width:100%}
+  }
+  @media print{
+    header,.controls,#renameStudentBtn,.teacher-followup,.chat-card,.no-print{display:none!important}
+    body{background:#fff}
+    section,.card{border-color:#bbb;break-inside:avoid}
+  }
 </style>
+</head>
 <body>
-<header><h2 style="margin:0">بوابة ولي الأمر</h2><span class="muted" style="color:#dfeee8">متابعة درجات ابنك أولاً بأول</span></header>
-
+<header><div class="wrap"><h1>بوابة ولي الأمر</h1><p>متابعة ابنك أولًا بأول</p></div></header>
+<main class="wrap">
 <section id="authBox"></section>
-<section id="reportsBox" style="display:none"></section>
+<div id="reportsBox" style="display:none"></div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ============================================================
-// عبّئ نفس القيمتين المستخدمتين في parent-sync.js:
+// إعدادات Supabase (نفس القيمتين في parent-sync.js)
 // ============================================================
 const SUPABASE_URL = 'https://bobjfngkrepajfsmaihk.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_tlHAjfYiVXXq81ponT7E-g_fniIquBM';
@@ -112,6 +150,7 @@ const reportsBox = document.getElementById('reportsBox');
 const PENDING_CODE_KEY = 'parent-pending-code';
 const KNOWN_KEY = 'parent-known-students';
 const SELECTED_KEY = 'parent-selected-student';
+const WEEKLY_PREFIXES = ['الخطة العلاجية الأسبوعية', 'خطاب شكر وعرفان'];
 (function captureCode(){
   const p = new URLSearchParams(location.search);
   const c = p.get('code');
@@ -124,286 +163,314 @@ const SELECTED_KEY = 'parent-selected-student';
 })();
 function pendingCode(){ try{ return localStorage.getItem(PENDING_CODE_KEY); }catch(_){ return null; } }
 function clearPendingCode(){ try{ localStorage.removeItem(PENDING_CODE_KEY); }catch(_){} }
-const urlCode = pendingCode();
-function periodLabel(i){return i===0?'الأولى':'الثانية'}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v===null?d:v}catch(_){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,v)}catch(_){}}
 
-let reportMode=localStorage.getItem('parent-report-mode')||'short',reportSemester=Number(localStorage.getItem('parent-report-semester')||0),reportPeriod=Number(localStorage.getItem('parent-report-period')||0);
-function rankText(r){return r?`${r.rank} من ${r.total}`:'لا توجد بيانات كافية'}
-function renderControls(){return `<div class="report-controls"><b>نوع التقرير:</b><button id="shortReportBtn" type="button" class="${reportMode==='short'?'active':''}">التقرير المختصر</button><button id="expandedReportBtn" type="button" class="${reportMode==='expanded'?'active':''}">التقرير الموسع</button><label>الفصل <select id="repSem"><option value="0"${reportSemester===0?' selected':''}>الأول</option><option value="1"${reportSemester===1?' selected':''}>الثاني</option></select></label><label>الفترة <select id="repPeriod"><option value="0"${reportPeriod===0?' selected':''}>الأولى</option><option value="1"${reportPeriod===1?' selected':''}>الثانية</option></select></label></div>`}
-function renderQuran(q){if(!q)return '';const st=q.stats||{},counts=st.gradeCounts||{},pr=(q.ranks?.periods||[]).find(x=>x.period===reportPeriod+1)?.rank,wr=(q.ranks?.weeks||[]).filter(x=>x.period===reportPeriod+1).map(x=>`<div class="metric"><span>الأسبوع ${x.week}</span><b>${rankText(x.rank)}</b></div>`).join(''),metrics=[['المجموع حتى الآن',(st.totalEarned??0)+' / '+(st.totalPossible??0)],['متوسط آخر 10',st.last10Average===null?'—':st.last10Average+' / 7'],['اتجاه المستوى',st.trend||'—'],['أفضل سلسلة 7/7',st.bestStreak??0],['الانتظام',st.attendanceRate===null?'—':st.attendanceRate+'%'],['التسميع المبكر',st.early??0],['المعدّل',st.modified??0],['عُوّض بعد غياب',st.madeUpAbsence??0],['غياب غير معوض',st.currentAbsence??0]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join(''),grades=[7,6,5,4,3,2,1,0].map(n=>`<div class="metric"><span>درجة ${n}</span><b>${counts[n]??0} مرة</b></div>`).join(''),daily=(q.daily||[]).filter(r=>r.period===reportPeriod+1).map(r=>`<tr><td>${r.weekName}</td><td>${r.day}</td><td>${r.value===null?'—':r.value+' / 7'}</td><td>${escapeHtml(r.status)}</td></tr>`).join(''),p=(q.periods||[]).find(x=>x.period===reportPeriod+1)||{};return `<div class="card"><h3>القرآن الكريم</h3><div class="summary-grid">${metrics}</div><div class="metric"><span>ترتيبه في الفترة</span><b>${rankText(pr)}</b></div><div class="expanded-only"><h4>ترتيبه لكل أسبوع</h4><div class="rank-grid">${wr}</div><h4>توزيع الدرجات</h4><div class="summary-grid">${grades}</div><table><tr><th>التسميع</th><th>الاختبار</th><th>المجموع</th></tr><tr><td>${p.score??'—'} / 15</td><td>${p.test??'—'} / 10</td><td>${p.periodScore??'—'} / 25</td></tr></table><details class="card"><summary>السجل اليومي من أول يوم</summary><div class="daily-wrap"><table class="daily-table"><tr><th>الأسبوع</th><th>اليوم</th><th>الدرجة</th><th>الحالة</th></tr>${daily||'<tr><td colspan="4">لا يوجد رصد.</td></tr>'}</table></div></details></div></div>`}
-function renderCourse(title,key,rows,ranks){if(!rows)return '';const r=rows.find(x=>x.period===reportPeriod+1);if(!r)return '';const rank=(ranks||[]).find(x=>x.period===reportPeriod+1)?.rank,cats=(r.categories||[]).map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${c.violation?c.earned+' مخالفة':c.earned+' / '+c.max}</td><td>${c.violation?'—':'المرصود '+c.filled+' من '+c.count+(c.remaining?' — المتبقي '+c.remaining:'')}</td></tr>`).join(''),score=r.scaled!==null&&r.scaled!==undefined?r.scaled+' / '+r.target:'لم يبدأ الرصد';return `<div class="card"><h3>${title}</h3><div class="summary-grid"><div class="metric"><span>نتيجة الفترة</span><b>${score}</b></div><div class="metric"><span>ترتيبه في الفترة</span><b>${rankText(rank)}</b></div><div class="metric"><span>المخالفات</span><b>${r.violations??0}</b></div></div><div class="expanded-only"><table><tr><th>البند</th><th>الحاصل</th><th>حالة الرصد</th></tr>${cats}</table></div></div>`}
-function levelLabel(pct){
- if(pct===null||pct===undefined||!Number.isFinite(pct))return 'لم يبدأ الرصد بعد';
- if(pct>=92)return 'مرتفع جدًا';
- if(pct>=80)return 'مرتفع';
- if(pct>=65)return 'جيد';
- if(pct>=50)return 'متوسط';
- return 'يحتاج متابعة';
+// أرقام لا تنقلب في الكتابة من اليمين: «5 من 7» بدل «5 / 7»
+function n(v){if(v===null||v===undefined||v==='')return '—';const x=typeof v==='number'?Math.round(v*100)/100:v;return `<span class="num">${escapeHtml(x)}</span>`}
+function of(a,b){return `${n(a)} من ${n(b)}`}
+function pctTxt(p){return p===null||p===undefined||!Number.isFinite(p)?'—':`<span class="num">${Math.round(p)}٪</span>`}
+
+let reportMode=lsGet('parent-report-mode','short'),reportSemester=Number(lsGet('parent-report-semester',0)),reportPeriod=Number(lsGet('parent-report-period',0));
+
+function renderControls(){
+  return `<div class="controls">
+    <div class="seg"><button id="shortReportBtn" type="button" class="${reportMode==='short'?'active':''}">التقرير المختصر</button><button id="expandedReportBtn" type="button" class="${reportMode==='expanded'?'active':''}">التقرير الموسع</button></div>
+    <label>الفصل<select id="repSem"><option value="0"${reportSemester===0?' selected':''}>الأول</option><option value="1"${reportSemester===1?' selected':''}>الثاني</option></select></label>
+    <label>الفترة<select id="repPeriod"><option value="0"${reportPeriod===0?' selected':''}>الأولى</option><option value="1"${reportPeriod===1?' selected':''}>الثانية</option></select></label>
+  </div>`;
 }
+
+// ---------- حساب المستويات ----------
+function levelLabel(pct){
+  if(pct===null||pct===undefined||!Number.isFinite(pct))return 'لم يبدأ الرصد بعد';
+  if(pct>=92)return 'مرتفع جدًا';
+  if(pct>=80)return 'مرتفع';
+  if(pct>=65)return 'جيد';
+  if(pct>=50)return 'متوسط';
+  return 'يحتاج متابعة';
+}
+function levelClass(pct){if(pct===null||pct===undefined||!Number.isFinite(pct))return 'none';if(pct>=80)return 'good';if(pct>=50)return 'mid';return 'need'}
+function lvl(pct){return `<span class="lvl ${levelClass(pct)}">${levelLabel(pct)}</span>`}
+function bar(pct){return pct===null||!Number.isFinite(pct)?'':`<div class="bar"><i style="width:${pct<=0?0:Math.max(2,Math.min(100,pct))}%"></i></div>`}
+
 function quranCurrentLevel(rep){
- const rows=(rep?.quran?.daily||[]).filter(r=>r.period===reportPeriod+1&&r.value!==null&&r.value!==undefined);
- if(!rows.length)return {label:'لم يبدأ الرصد بعد',pct:null,earned:0,possible:0,count:0,detail:'لا يوجد تسميع مرصود في الفترة المختارة.'};
- const earned=rows.reduce((a,r)=>a+Number(r.value||0),0),possible=rows.length*7,pct=possible?earned/possible*100:null;
- return {label:levelLabel(pct),pct,earned,possible,count:rows.length,detail:`${earned} من ${possible} في ${rows.length} تسميعات مرصودة`};
+  const rows=(rep?.quran?.daily||[]).filter(r=>r.period===reportPeriod+1&&r.value!==null&&r.value!==undefined);
+  if(!rows.length)return {pct:null,earned:0,possible:0,count:0};
+  const earned=rows.reduce((a,r)=>a+Number(r.value||0),0),possible=rows.length*7;
+  return {pct:possible?earned/possible*100:null,earned,possible,count:rows.length};
 }
 function courseCurrentLevel(rows){
- const r=(rows||[]).find(x=>x.period===reportPeriod+1);if(!r)return {label:'لا يدرس المادة',pct:null,earned:0,possible:0,count:0,detail:'—',cats:[]};
- let earned=0,possible=0,count=0;
- const cats=(r.categories||[]).filter(c=>!c.violation).map(c=>{
-   const maxPer=c.count?c.max/c.count:0;
-   const observedMax=(c.filled||0)*maxPer;
-   earned+=Number(c.earned||0);possible+=observedMax;count+=Number(c.filled||0);
-   return {...c,observedMax};
- });
- const pct=possible?earned/possible*100:null;
- return {label:levelLabel(pct),pct,earned,possible,count,detail:possible?`${Math.round(earned*100)/100} من ${Math.round(possible*100)/100} مما تم رصده`:'لم يبدأ الرصد بعد',cats,violations:r.violations||0,deduction:r.deduction||0,stars:r.stars||0};
-}
-function renderMissingTable(list){
-  if(!list.length) return '<p>لا يظهر نقص مستحق حاليًا.</p>';
-  const rowPattern=/^(.+?) — الفترة (الأولى|الثانية) — (.+?): متبقٍ (\d+) من (\d+)\.$/;
-  const rows=[], notes=[];
-  for(const x of list){
-    const m=String(x).match(rowPattern);
-    if(m) rows.push({subject:m[1],period:m[2],item:m[3],remaining:m[4],count:m[5]});
-    else notes.push(x);
-  }
-  const notesHtml=notes.length?`<ul>${notes.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:'';
-  if(!rows.length) return notesHtml||'<p>لا يظهر نقص مستحق حاليًا.</p>';
-  const table=`<table><tr><th>المادة</th><th>الفترة</th><th>البند</th><th>المتبقي</th></tr>${
-    rows.map(r=>`<tr><td>${escapeHtml(r.subject)}</td><td>${escapeHtml(r.period)}</td><td>${escapeHtml(r.item)}</td><td>${r.remaining} من ${r.count}</td></tr>`).join('')
-  }</table>`;
-  return notesHtml+table;
-}
-function subjectLevelCard(title,obj,extra=''){
- const pct=obj.pct===null?'—':Math.round(obj.pct*10)/10+'%';
- return `<div class="subject-level-card"><h4>${title}</h4><div class="subject-level-main">${obj.label}</div><div class="subject-level-score">${obj.detail}</div><div class="muted">النسبة من الرصد الحالي: ${pct}</div>${extra}</div>`;
+  const r=(rows||[]).find(x=>x.period===reportPeriod+1);if(!r)return null;
+  let earned=0,possible=0,count=0;
+  const cats=(r.categories||[]).filter(c=>!c.violation).map(c=>{const maxPer=c.count?c.max/c.count:0,observedMax=(c.filled||0)*maxPer;earned+=Number(c.earned||0);possible+=observedMax;count+=Number(c.filled||0);return {...c,observedMax}});
+  return {pct:possible?earned/possible*100:null,earned,possible,count,cats,violations:r.violations||0,deduction:r.deduction||0,stars:r.stars||0,scaled:r.scaled,target:r.target,raw:r};
 }
 function overallCurrentLevel(rep){
- const vals=[];
- const q=quranCurrentLevel(rep);if(q.pct!==null)vals.push(q.pct);
- for(const key of ['islamic','tajweed','life']){const x=courseCurrentLevel(rep[key]);if(x.pct!==null)vals.push(x.pct)}
- if(!vals.length)return {pct:null,label:'لم يبدأ الرصد بعد'};
- const pct=vals.reduce((a,b)=>a+b,0)/vals.length;return {pct,label:levelLabel(pct)};
+  const vals=[];const q=quranCurrentLevel(rep);if(q.pct!==null)vals.push(q.pct);
+  for(const key of ['islamic','tajweed','life']){const x=courseCurrentLevel(rep[key]);if(x&&x.pct!==null)vals.push(x.pct)}
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
 }
-function renderFollowup(rep){
- const sp=rep.support||{},manual=sp.level==='distinguished'?'متميز':sp.level==='remedial'?'خطة تحسين ومتابعة':'متابعة عادية';
- const q=quranCurrentLevel(rep),isl=courseCurrentLevel(rep.islamic),taj=courseCurrentLevel(rep.tajweed),life=courseCurrentLevel(rep.life),overall=overallCurrentLevel(rep);
- const qExtra=q.count?`<div class="muted">متوسط التسميع: ${(q.earned/q.count).toFixed(2)} / 7</div>`:'';
- const islExtra=isl.pct===null?'':`<div class="muted">المخالفات: ${isl.violations} — الخصم: ${isl.deduction}</div>`;
- const tajExtra=taj.pct===null?'':`<div class="muted">المخالفات: ${taj.violations} — الخصم: ${taj.deduction}</div>`;
- const subjectCards=`<div class="subject-level-grid">${subjectLevelCard('القرآن الكريم',q,qExtra)}${subjectLevelCard('الدراسات الإسلامية',isl,islExtra)}${subjectLevelCard('التجويد',taj,tajExtra)}${life.label!=='لا يدرس المادة'?subjectLevelCard('المهارات الحياتية',life):''}</div>`;
- const strengths=(rep.strengths||[]).map(x=>`<span class="badge-good">✓ ${escapeHtml(x)}</span>`).join('')||'<span class="muted">ستظهر مع تقدم الرصد.</span>',
- needs=(rep.needs||[]).map(x=>`<span class="badge-need">${escapeHtml(x)}</span>`).join('')||'<span class="muted">لا توجد ملاحظة بارزة حاليًا.</span>',
- missing=renderMissingTable(rep.missing||[]),
- note=sp.teacherNote?`<div class="card"><h3>ملاحظة المعلم</h3>${escapeHtml(sp.teacherNote)}</div>`:'',
- praise=sp.praise?`<div class="card good-card"><h3>إشادة من المعلم</h3>${escapeHtml(sp.praise)}</div>`:'',
- goal=sp.goal?`<div class="card"><h3>الهدف الحالي</h3>${escapeHtml(sp.goal)}</div>`:'',
- enrich=sp.enrichmentPlan?`<div class="card good-card"><h3>خطة الإثراء</h3><div class="plan">${escapeHtml(sp.enrichmentPlan)}</div></div>`:'',
- rem=sp.level==='remedial'?`<div class="card warning-card"><h3>خطة التحسين والمتابعة</h3><div class="plan">${escapeHtml(sp.remedialPlan||'لم تُكتب الخطة بعد.')}</div></div>`:'';
- return `<div class="card overall-level-card"><h3>المستوى الحالي في جميع المواد</h3><div class="overall-level"><span>المستوى العام من الرصد الحالي</span><b>${overall.label}</b>${overall.pct===null?'':`<strong>${Math.round(overall.pct*10)/10}%</strong>`}</div><p class="muted">يُحسب من الدرجات التي رُصدت فعليًا في الفترة المختارة، ولا يحسب الخانات التي لم يحن رصدها بعد على أنها صفر.</p>${subjectCards}</div>${note}${praise}${goal}<div class="card"><h3>ملخص المتابعة</h3><div class="metric"><span>تصنيف المعلم اليدوي</span><b>${manual}</b></div><h4>نقاط القوة</h4>${strengths}<h4>ما يحتاج إلى تحسين</h4>${needs}</div><div class="card expanded-only"><h3>ماذا ينقصه الآن؟</h3>${missing}</div>${enrich}${rem}`;
+
+// ---------- المختصر: المستوى العام وبطاقات المواد ----------
+function renderLevels(rep){
+  const q=quranCurrentLevel(rep),st=rep.quran?.stats||{},overall=overallCurrentLevel(rep);
+  const cards=[];
+  if(rep.quran){
+    const line=q.count?`متوسط التسميع ${n((q.earned/q.count).toFixed(1))} من ${n(7)}`+(st.attendanceRate!==null&&st.attendanceRate!==undefined?` • الحضور ${pctTxt(st.attendanceRate)}`:''):'لا يوجد تسميع مرصود في هذه الفترة.';
+    cards.push(`<div class="subject"><h4>القرآن الكريم ${lvl(q.pct)}</h4>${bar(q.pct)}<p>${q.count?'الدرجات: '+of(q.earned,q.possible):''}</p><p class="muted">${line}</p></div>`);
+  }
+  for(const [key,title] of [['islamic','الدراسات الإسلامية'],['tajweed','التجويد'],['life','المهارات الحياتية']]){
+    const c=courseCurrentLevel(rep[key]);if(!c)continue;
+    const res=c.scaled!==null&&c.scaled!==undefined?'نتيجة الفترة: '+of(c.scaled,c.target):'';
+    cards.push(`<div class="subject"><h4>${title} ${lvl(c.pct)}</h4>${bar(c.pct)}<p>${res}</p><p class="muted">${c.possible?'المرصود حتى الآن: '+of(Math.round(c.earned*10)/10,Math.round(c.possible*10)/10):'لم يبدأ الرصد بعد.'}${c.violations?` • مخالفات: ${n(c.violations)}`:''}</p></div>`);
+  }
+  return `<div class="card"><div class="overall"><div><h3 style="margin:0">المستوى العام</h3><span class="muted">من الدرجات المرصودة فعلًا في الفترة المختارة</span></div><div class="big">${levelLabel(overall)} ${overall===null?'':pctTxt(overall)}</div></div>${bar(overall)}<div class="subjects">${cards.join('')}</div></div>`;
 }
-function renderTimeline(rep){const items=(rep.quran?.daily||[]).filter(r=>r.period===reportPeriod+1).slice(-20).reverse();return `<div class="card expanded-only"><h3>السجل الزمني</h3><div class="timeline">${items.map(r=>`<div class="timeline-item"><b>${r.weekName} — ${r.day}</b><br>${r.value===null?'—':r.value+' / 7'} — ${escapeHtml(r.status)}</div>`).join('')||'لا توجد أحداث.'}</div></div>`}
-function renderStudentCard(row){const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,updated=rep.generatedAt?new Date(rep.generatedAt).toLocaleString('ar-SA'):'لم تُحدَّث بعد';if(all.support?.portalEnabled===false||rep.support?.portalEnabled===false)return `<section><h2>${escapeHtml(row.full_name||all.name||'الطالب')}</h2><div class="card warning-card">بوابة المتابعة موقوفة مؤقتًا.</div></section>`;const last=localStorage.getItem('parent-last-report-'+row.id),isNew=!last||new Date(rep.generatedAt)>new Date(last||0);localStorage.setItem('parent-last-report-'+row.id,new Date().toISOString());return `<section><h2>${escapeHtml(row.full_name||all.name||rep.name||'الطالب')} ${isNew?'<span class="new-pill">جديد</span>':''}</h2><p class="muted">الشعبة: ${escapeHtml(rep.section||all.section||'—')} — آخر تحديث: ${updated}</p><div class="card"><b>تقارير المتابعة</b><p class="muted">التقريران يعملان من أول رصد مهما كان قليلًا. المختصر يعرض الملخص الحالي، والموسع يضيف السجل اليومي والإحصاءات والتفاصيل والترتيب. بعض المؤشرات ستكتب «لا توجد بيانات كافية» حتى يزداد الرصد.</p></div>${renderControls()}<div id="activeReport" class="report-view"><div class="report-view-title"><h3 id="activeReportTitle">${reportMode==='expanded'?'التقرير الموسع':'التقرير المختصر'}</h3><span class="muted">الفصل ${reportSemester===0?'الأول':'الثاني'} — الفترة ${reportPeriod===0?'الأولى':'الثانية'}</span></div>${renderFollowup(rep)}${renderQuran(rep.quran)}${renderCourse('الدراسات الإسلامية','islamic',rep.islamic,rep.courseRanks?.islamic)}${renderCourse('التجويد','tajweed',rep.tajweed,rep.courseRanks?.tajweed)}${renderCourse('المهارات الحياتية','life',rep.life,rep.courseRanks?.life)}${renderTimeline(rep)}</div><div class="card parent-chat-card" data-student="${escapeHtml(row.id)}"><b>مراسلة المعلم</b><div class="chat"><p class="muted">جارٍ تحميل المحادثة...</p></div><textarea rows="2" placeholder="اكتب رسالتك للمعلم..."></textarea><button type="button" class="send-msg">إرسال الرسالة</button><span class="muted msg-status"></span></div></section>`}
-let __currentReportRows=null,__teacherPreviewRow=null;
-function rerenderCurrentReport(){
- if(__teacherPreviewRow){renderTeacherPreviewRow(__teacherPreviewRow);return}
- if(__currentReportRows){
-   reportsBox.innerHTML=__currentReportRows.map(renderStudentCard).join('');
-   wireReportControls(rerenderCurrentReport);
-   wireParentChats();
- }
+
+function renderTeacherCards(rep){
+  const sp=rep.support||{};let h='';
+  if(sp.praise)h+=`<div class="card good"><h3>إشادة من المعلم</h3><div class="plan">${escapeHtml(sp.praise)}</div></div>`;
+  if(sp.teacherNote)h+=`<div class="card"><h3>ملاحظة المعلم</h3><div class="plan">${escapeHtml(sp.teacherNote)}</div></div>`;
+  if(sp.goal)h+=`<div class="card"><h3>الهدف الحالي</h3><div class="plan">${escapeHtml(sp.goal)}</div></div>`;
+  if(sp.level==='remedial')h+=`<div class="card warn"><h3>خطة التحسين والمتابعة</h3><div class="plan">${escapeHtml(sp.remedialPlan||'سيكتبها المعلم قريبًا.')}</div>${sp.remedialTasks?`<h4>المهام</h4><ul class="clean">${String(sp.remedialTasks).split('\n').filter(x=>x.trim()).map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:''}</div>`;
+  if(sp.enrichmentPlan)h+=`<div class="card good"><h3>خطة الإثراء</h3><div class="plan">${escapeHtml(sp.enrichmentPlan)}</div></div>`;
+  return h;
 }
-function applyReportMode(){
- const expanded=reportMode==='expanded';
- document.querySelectorAll('.expanded-only').forEach(x=>x.style.display=expanded?'':'none');
- const a=document.getElementById('shortReportBtn'),b=document.getElementById('expandedReportBtn');if(a)a.classList.toggle('active',!expanded);if(b)b.classList.toggle('active',expanded);
- const title=document.getElementById('activeReportTitle');if(title)title.textContent=expanded?'التقرير الموسع':'التقرير المختصر';
+
+function parseMissing(list){
+  const re=/^(.+?) — الفترة (الأولى|الثانية) — (.+?): متبقٍ (\d+) من (\d+)\.$/,rows=[],notes=[];
+  for(const x of list||[]){const m=String(x).match(re);if(m)rows.push({subject:m[1],period:m[2],item:m[3],remaining:+m[4],count:+m[5]});else notes.push(String(x))}
+  return {rows,notes};
 }
+function renderFollowupSummary(rep){
+  const strengths=(rep.strengths||[]).map(x=>`<span class="badge-good">✓ ${escapeHtml(x)}</span>`).join('');
+  const needs=(rep.needs||[]).map(x=>`<span class="badge-need">${escapeHtml(x)}</span>`).join('');
+  const per=reportPeriod===0?'الأولى':'الثانية',miss=parseMissing(rep.missing),rows=miss.rows.filter(r=>r.period===per);
+  const short=rows.slice(0,5).map(r=>`<li>${escapeHtml(r.subject)}: ${escapeHtml(r.item)} — باقٍ ${n(r.remaining)} من ${n(r.count)}</li>`).join('');
+  return `<div class="card"><h3>ملخص المتابعة</h3>
+    <h4>نقاط القوة</h4>${strengths||'<p class="muted">ستظهر مع تقدّم الرصد.</p>'}
+    <h4>ما يحتاج إلى تحسين</h4>${needs||'<p class="muted">لا توجد ملاحظة بارزة حاليًا.</p>'}
+    <h4>ما الذي ينقصه الآن؟</h4>${short?`<ul class="clean">${short}</ul>${rows.length>5?`<p class="muted">وغيرها ${n(rows.length-5)} — تجدها كاملة في التقرير الموسع.</p>`:''}`:(miss.notes.length?`<ul class="clean">${miss.notes.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:'<p class="muted">لا يظهر نقص مستحق حاليًا.</p>')}
+  </div>`;
+}
+
+// ---------- الموسع ----------
+function renderQuranExpanded(q){
+  if(!q)return '';
+  const st=q.stats||{},counts=st.gradeCounts||{},p=(q.periods||[]).find(x=>x.period===reportPeriod+1)||{};
+  const stat=(label,val)=>`<div class="stat"><span>${label}</span><b>${val}</b></div>`;
+  const stats=[
+    stat('مجموع درجات التسميع',of(st.totalEarned??0,st.totalPossible??0)),
+    stat('متوسط آخر 10 تسميعات',st.last10Average===null||st.last10Average===undefined?'—':of(st.last10Average,7)),
+    stat('اتجاه المستوى',escapeHtml(st.trend||'—')),
+    stat('نسبة الحضور',pctTxt(st.attendanceRate)),
+    stat('أطول تتابع بالدرجة الكاملة',n(st.bestStreak??0)+' مرات'),
+    stat('تسميع قبل موعده',n(st.early??0)),
+    stat('غياب عوّضه لاحقًا',n(st.madeUpAbsence??0)),
+    stat('غياب لم يُعوَّض',n(st.currentAbsence??0))
+  ].join('');
+  const total=[7,6,5,4,3,2,1,0].reduce((a,k)=>a+(counts[k]||0),0);
+  const dist=total?`<div class="dist">${[7,6,5,4,3,2,1,0].map(k=>`<span>الدرجة ${n(k)}</span>${bar((counts[k]||0)/total*100)||'<div class="bar"></div>'}<span>${n(counts[k]||0)}</span>`).join('')}</div>`:'<p class="muted">لا توجد درجات بعد.</p>';
+  const daily=(q.daily||[]).filter(r=>r.period===reportPeriod+1);
+  const byWeek=new Map();for(const r of daily){if(!byWeek.has(r.weekName))byWeek.set(r.weekName,[]);byWeek.get(r.weekName).push(r)}
+  const weeks=[...byWeek.entries()].map(([w,rs])=>`<div class="week"><b>الأسبوع ${escapeHtml(w)}</b><div class="days">${rs.map(r=>{const cls=r.value===null?(r.status==='غياب'?'abs':'none'):(r.value>=7?'full':r.value<=3?'low':'');return `<div class="day ${cls}"><small>${escapeHtml(r.day)}</small>${r.value===null?escapeHtml(r.status==='غياب'?'غياب':'—'):n(r.value)}</div>`}).join('')}</div></div>`).join('');
+  return `<div class="card"><h3>القرآن الكريم — التفاصيل</h3>
+    <div class="tbl"><table><tr><th>التسميع</th><th>الاختبار</th><th>مجموع الفترة</th></tr><tr><td>${of(p.score??'—',15)}</td><td>${of(p.test??'—',10)}</td><td>${of(p.periodScore??'—',25)}</td></tr></table></div>
+    <h4>مؤشرات التسميع</h4><div class="stats">${stats}</div>
+    <h4>توزيع الدرجات</h4>${dist}
+    <h4>السجل اليومي</h4><p class="muted">الأخضر درجة كاملة، والأحمر 3 فأقل، والرمادي غياب.</p><div class="weeks">${weeks||'<p class="muted">لا يوجد رصد في هذه الفترة.</p>'}</div>
+  </div>`;
+}
+function renderCourseExpanded(title,rows){
+  const c=courseCurrentLevel(rows);if(!c)return '';
+  const cats=(c.raw.categories||[]).map(x=>`<tr><td>${escapeHtml(x.name)}</td><td>${x.violation?n(x.earned)+' مخالفة':of(x.earned,x.max)}</td><td>${x.violation?'—':'رُصد '+of(x.filled,x.count)}</td></tr>`).join('');
+  const extra=[c.violations?`المخالفات: ${n(c.violations)}`:'',c.deduction?`ما خُصم بسبب المخالفات: ${n(c.deduction)}`:'',c.stars?`نجوم التميز: ${n(c.stars)}`:''].filter(Boolean).join(' • ');
+  return `<div class="card"><h3>${title} — التفاصيل</h3>${extra?`<p class="muted">${extra}</p>`:''}<div class="tbl"><table><tr><th>البند</th><th>الدرجة</th><th>الرصد</th></tr>${cats}</table></div></div>`;
+}
+function renderMissingExpanded(rep){
+  const miss=parseMissing(rep.missing);if(!miss.rows.length&&!miss.notes.length)return '';
+  return `<div class="card"><h3>كل ما ينقصه حتى الآن</h3>${miss.notes.length?`<ul class="clean">${miss.notes.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:''}${miss.rows.length?`<div class="tbl"><table><tr><th>المادة</th><th>الفترة</th><th>البند</th><th>الباقي</th></tr>${miss.rows.map(r=>`<tr><td>${escapeHtml(r.subject)}</td><td>${escapeHtml(r.period)}</td><td>${escapeHtml(r.item)}</td><td>${of(r.remaining,r.count)}</td></tr>`).join('')}</table></div>`:''}</div>`;
+}
+
+function renderReportBody(rep){
+  let h=renderLevels(rep)+renderTeacherCards(rep)+renderFollowupSummary(rep);
+  if(reportMode==='expanded'){
+    h+=renderQuranExpanded(rep.quran)+renderCourseExpanded('الدراسات الإسلامية',rep.islamic)+renderCourseExpanded('التجويد',rep.tajweed)+renderCourseExpanded('المهارات الحياتية',rep.life)+renderMissingExpanded(rep);
+  }
+  return h;
+}
+
+// ---------- صفحة ولي الأمر ----------
+function renderStudentCard(row){
+  const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,updated=rep.generatedAt?new Date(rep.generatedAt).toLocaleString('ar-SA'):'لم تُحدَّث بعد';
+  const name=row.full_name||all.name||rep.name||'الطالب';
+  if(all.support?.portalEnabled===false||rep.support?.portalEnabled===false)return `<section><h2>${escapeHtml(name)}</h2><div class="card warn">بوابة المتابعة موقوفة مؤقتًا.</div></section>`;
+  const last=lsGet('parent-last-report-'+row.id,null),isNew=!last||new Date(rep.generatedAt)>new Date(last||0);
+  lsSet('parent-last-report-'+row.id,new Date().toISOString());
+  return `<section><h2>${escapeHtml(name)} ${isNew?'<span class="new-pill">جديد</span>':''}</h2><p class="muted">الشعبة: ${escapeHtml(rep.section||all.section||'—')} — آخر تحديث للتقرير: ${updated}</p></section>
+  <div class="weekly-slot" data-student="${escapeHtml(row.id)}"></div>
+  <section>${renderControls()}<p class="muted">${reportMode==='expanded'?'التقرير الموسع: المختصر مع السجل اليومي وتفاصيل كل مادة.':'التقرير المختصر: مستوى ابنكم وما ينقصه. للتفاصيل اختر «التقرير الموسع».'} — الفصل ${reportSemester===0?'الأول':'الثاني'}، الفترة ${reportPeriod===0?'الأولى':'الثانية'}</p>
+  ${renderReportBody(rep)}</section>
+  <section class="chat-card" data-student="${escapeHtml(row.id)}"><h3>مراسلة المعلم</h3><div class="chat"><p class="muted">جارٍ تحميل المحادثة...</p></div><textarea rows="2" placeholder="اكتب رسالتك للمعلم..."></textarea><button type="button" class="send-msg">إرسال الرسالة</button><span class="muted msg-status"></span></section>`;
+}
+
+let __teacherPreviewRow=null;
 function wireReportControls(rerender){
- const changeMode=mode=>{reportMode=mode;localStorage.setItem('parent-report-mode',mode);rerender();setTimeout(()=>document.getElementById('activeReport')?.scrollIntoView({behavior:'smooth',block:'start'}),0)};
- const short=document.getElementById('shortReportBtn'),expanded=document.getElementById('expandedReportBtn');if(short)short.onclick=()=>changeMode('short');if(expanded)expanded.onclick=()=>changeMode('expanded');
- const sem=document.getElementById('repSem'),per=document.getElementById('repPeriod');if(sem)sem.onchange=()=>{reportSemester=Number(sem.value);localStorage.setItem('parent-report-semester',reportSemester);rerender()};if(per)per.onchange=()=>{reportPeriod=Number(per.value);localStorage.setItem('parent-report-period',reportPeriod);rerender()};applyReportMode();
+  const changeMode=mode=>{reportMode=mode;lsSet('parent-report-mode',mode);rerender()};
+  const a=document.getElementById('shortReportBtn'),b=document.getElementById('expandedReportBtn');
+  if(a)a.onclick=()=>changeMode('short');if(b)b.onclick=()=>changeMode('expanded');
+  const sem=document.getElementById('repSem'),per=document.getElementById('repPeriod');
+  if(sem)sem.onchange=()=>{reportSemester=Number(sem.value);lsSet('parent-report-semester',reportSemester);rerender()};
+  if(per)per.onchange=()=>{reportPeriod=Number(per.value);lsSet('parent-report-period',reportPeriod);rerender()};
 }
 function chatTime(v){try{return new Date(v).toLocaleString('ar-SA')}catch(_){return v||''}}
+function isWeeklyMsg(m){return m.sender_role==='teacher'&&WEEKLY_PREFIXES.some(p=>String(m.body||'').startsWith(p))}
+
+function renderWeekly(slot,msgs){
+  const latest=(msgs||[]).filter(isWeeklyMsg).slice(-1)[0];
+  if(!latest){slot.innerHTML='';return}
+  const thanks=String(latest.body).startsWith('خطاب شكر');
+  const ack=latest.acknowledged_at?`<p class="ack-done">✓ أقررتم بالاطلاع في ${chatTime(latest.acknowledged_at)}</p>`:`<button type="button" class="ack-btn">${thanks?'اطّلعت، شكرًا لكم':'اطّلعت على الخطة وسأتابع ابني'}</button><p class="muted">ضغطكم هذا الزر يُبلغ المعلم بأنكم اطّلعتم.</p>`;
+  slot.innerHTML=`<section class="weekly ${thanks?'':''}"><h3>${thanks?'🌟 من المعلم هذا الأسبوع':'📌 من المعلم هذا الأسبوع'}</h3><p class="meta">أُرسلت في ${chatTime(latest.created_at)}</p><div class="card ${thanks?'good':'warn'}"><div class="plan">${escapeHtml(latest.body)}</div></div>${ack}</section>`;
+  const btn=slot.querySelector('.ack-btn');
+  if(btn)btn.onclick=async()=>{btn.disabled=true;btn.textContent='جارٍ الإرسال...';const {error}=await supa.rpc('acknowledge_message',{p_id:String(latest.id)});if(error){btn.disabled=false;btn.textContent='تعذّر الإرسال، أعد المحاولة';return}latest.acknowledged_at=new Date().toISOString();renderWeekly(slot,msgs)};
+}
 
 async function loadParentChat(card,studentId){
   const chat=card.querySelector('.chat');
   const {data,error}=await supa.from('parent_messages').select('*').eq('student_id',studentId).order('created_at',{ascending:true});
   if(error){chat.innerHTML='<p class="error">تعذّر تحميل الرسائل: '+escapeHtml(error.message)+'</p>';return;}
   chat.replaceChildren();
-  if(!data?.length){chat.innerHTML='<p class="muted">لا توجد رسائل بعد. يمكنك بدء المحادثة مع المعلم.</p>';}
+  if(!data?.length)chat.innerHTML='<p class="muted">لا توجد رسائل بعد. يمكنك بدء المحادثة مع المعلم.</p>';
   for(const m of data||[]){
     const div=document.createElement('div');
     div.className='bubble '+(m.sender_role==='parent'?'parent':'teacher');
-    div.innerHTML=`<div>${escapeHtml(m.body)}</div><div class="muted" style="font-size:11px;margin-top:4px">${m.sender_role==='parent'?'أنت':'المعلم'} — ${chatTime(m.created_at)}</div>`;
+    div.innerHTML=`<div class="body">${escapeHtml(m.body)}</div><div class="when">${m.sender_role==='parent'?'أنت':'المعلم'} — ${chatTime(m.created_at)}</div>`;
     chat.appendChild(div);
   }
   chat.scrollTop=chat.scrollHeight;
-  const unread=(data||[]).filter(m=>m.sender_role==='teacher'&&!m.read_at).map(m=>m.id);
-  if(unread.length) await supa.rpc('mark_messages_read',{p_ids:unread});
+  const slot=document.querySelector(`.weekly-slot[data-student="${CSS.escape(studentId)}"]`);
+  if(slot&&!slot.dataset.rendered){slot.dataset.rendered='1';renderWeekly(slot,data)}
+  const unread=(data||[]).filter(m=>m.sender_role==='teacher'&&!m.read_at).map(m=>String(m.id));
+  if(unread.length){try{await supa.rpc('mark_messages_read',{p_ids:unread})}catch(_){}}
 }
 
 async function wireParentChats(){
   const {data:{user}}=await supa.auth.getUser();
-  for(const card of document.querySelectorAll('.parent-chat-card')){
+  for(const card of document.querySelectorAll('.chat-card')){
     const studentId=card.dataset.student;
     await loadParentChat(card,studentId);
     card.querySelector('.send-msg').onclick=async()=>{
       const ta=card.querySelector('textarea'),status=card.querySelector('.msg-status'),body=ta.value.trim();
       if(!body){status.textContent='اكتب الرسالة أولًا.';return;}
       status.textContent='جارٍ الإرسال...';
-      const {error}=await supa.from('parent_messages').insert({
-        student_id:studentId,parent_uid:user.id,sender_role:'parent',body
-      });
+      const {error}=await supa.from('parent_messages').insert({student_id:studentId,parent_uid:user.id,sender_role:'parent',body});
       if(error){status.textContent='تعذّر الإرسال: '+error.message;return;}
       ta.value='';status.textContent='تم الإرسال.';await loadParentChat(card,studentId);
     };
   }
-  if(window.__parentMsgTimer) clearInterval(window.__parentMsgTimer);
+  if(window.__parentMsgTimer)clearInterval(window.__parentMsgTimer);
   window.__parentMsgTimer=setInterval(()=>{
-    document.querySelectorAll('.parent-chat-card').forEach(card=>loadParentChat(card,card.dataset.student));
+    if(document.activeElement&&document.activeElement.tagName==='TEXTAREA')return;
+    document.querySelectorAll('.chat-card').forEach(card=>loadParentChat(card,card.dataset.student));
   },15000);
 }
 
-
-function teacherFollowupEditor(row,rep){const s=rep.support||{};return `<div class="card teacher-followup" id="teacherFollowup"><h3>إدارة متابعة الطالب — للمعلم</h3><p class="muted">هذه اللوحة لا تظهر لولي الأمر بصورتها التحريرية. ما يظهر له هو المحتوى الذي تحفظه بحسب نوعه.</p><label>المستوى<select id="fuLevel"><option value="normal"${s.level==='normal'?' selected':''}>عادي</option><option value="distinguished"${s.level==='distinguished'?' selected':''}>متميز</option><option value="remedial"${s.level==='remedial'?' selected':''}>يحتاج خطة تحسين ومتابعة</option></select></label><label>ملاحظة المعلم لولي الأمر<textarea id="fuTeacherNote" rows="3">${escapeHtml(s.teacherNote||'')}</textarea></label><label>ملاحظة داخلية للمعلم فقط<textarea id="fuPrivateNote" rows="3">${escapeHtml(s.privateNote||'')}</textarea></label><label>هدف الطالب الحالي<textarea id="fuGoal" rows="2">${escapeHtml(s.goal||'')}</textarea></label><label>إشادة للطالب وولي الأمر<textarea id="fuPraise" rows="2">${escapeHtml(s.praise||'')}</textarea></label><label>خطة الإثراء<textarea id="fuEnrichment" rows="4">${escapeHtml(s.enrichmentPlan||'')}</textarea></label><label>مهام خطة الإثراء — مهمة في كل سطر<textarea id="fuEnrichmentTasks" rows="4">${escapeHtml(s.enrichmentTasks||'')}</textarea></label><div id="fuRemedialWrap"><label>خطة التحسين والمتابعة<textarea id="fuRemedial" rows="4">${escapeHtml(s.remedialPlan||'')}</textarea></label><label>مهام خطة التحسين — مهمة في كل سطر<textarea id="fuRemedialTasks" rows="4">${escapeHtml(s.remedialTasks||'')}</textarea></label></div><label class="checkline"><input id="fuContact" type="checkbox"${s.contactNeeded?' checked':''}> يحتاج إلى تواصل مع ولي الأمر</label><div class="teacher-followup-actions"><button type="button" id="saveFollowup">حفظ المتابعة</button><span id="followupSaved" class="save-ok"></span></div></div>`}
-function wireTeacherFollowup(row,rerender){const level=document.getElementById('fuLevel'),wrap=document.getElementById('fuRemedialWrap');if(!level)return;const show=()=>wrap.style.display=level.value==='remedial'?'':'none';level.onchange=show;show();document.getElementById('saveFollowup').onclick=()=>{const val=id=>document.getElementById(id)?.value||'',support={level:level.value,teacherNote:val('fuTeacherNote'),privateNote:val('fuPrivateNote'),goal:val('fuGoal'),praise:val('fuPraise'),enrichmentPlan:val('fuEnrichment'),enrichmentTasks:val('fuEnrichmentTasks'),remedialPlan:val('fuRemedial'),remedialTasks:val('fuRemedialTasks'),contactNeeded:!!document.getElementById('fuContact')?.checked};if(window.opener)window.opener.postMessage({type:'quran-update-support',studentUid:row.id,support},'*');const all=row.report||{};all.support={...(all.support||{}),...support};for(const sm of all.semesters||[])if(sm)sm.support={...(sm.support||{}),...support};sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));document.getElementById('followupSaved').textContent='تم الحفظ';setTimeout(()=>{const x=document.getElementById('followupSaved');if(x)x.textContent=''},1800)}}
+// ---------- معاينة المعلم (من داخل التطبيق) ----------
+function teacherFollowupEditor(row,rep){const s=rep.support||{};return `<section class="teacher-followup" id="teacherFollowup"><h3>إدارة متابعة الطالب — للمعلم</h3><p class="muted">هذه اللوحة لا تظهر لولي الأمر بصورتها التحريرية. ما يظهر له هو المحتوى الذي تحفظه بحسب نوعه.</p><label>المستوى<select id="fuLevel"><option value="normal"${s.level==='normal'?' selected':''}>عادي</option><option value="distinguished"${s.level==='distinguished'?' selected':''}>متميز</option><option value="remedial"${s.level==='remedial'?' selected':''}>يحتاج خطة تحسين ومتابعة</option></select></label><label>ملاحظة المعلم لولي الأمر<textarea id="fuTeacherNote" rows="3">${escapeHtml(s.teacherNote||'')}</textarea></label><label>ملاحظة داخلية للمعلم فقط<textarea id="fuPrivateNote" rows="3">${escapeHtml(s.privateNote||'')}</textarea></label><label>هدف الطالب الحالي<textarea id="fuGoal" rows="2">${escapeHtml(s.goal||'')}</textarea></label><label>إشادة للطالب وولي الأمر<textarea id="fuPraise" rows="2">${escapeHtml(s.praise||'')}</textarea></label><label>خطة الإثراء<textarea id="fuEnrichment" rows="4">${escapeHtml(s.enrichmentPlan||'')}</textarea></label><label>مهام خطة الإثراء — مهمة في كل سطر<textarea id="fuEnrichmentTasks" rows="4">${escapeHtml(s.enrichmentTasks||'')}</textarea></label><div id="fuRemedialWrap"><label>خطة التحسين والمتابعة<textarea id="fuRemedial" rows="4">${escapeHtml(s.remedialPlan||'')}</textarea></label><label>مهام خطة التحسين — مهمة في كل سطر<textarea id="fuRemedialTasks" rows="4">${escapeHtml(s.remedialTasks||'')}</textarea></label></div><label class="checkline"><input id="fuContact" type="checkbox"${s.contactNeeded?' checked':''}> يحتاج إلى تواصل مع ولي الأمر</label><div><button type="button" id="saveFollowup">حفظ المتابعة</button> <span id="followupSaved" class="save-ok"></span></div></section>`}
+function wireTeacherFollowup(row){const level=document.getElementById('fuLevel'),wrap=document.getElementById('fuRemedialWrap');if(!level)return;const show=()=>wrap.style.display=level.value==='remedial'?'':'none';level.onchange=show;show();document.getElementById('saveFollowup').onclick=()=>{const val=id=>document.getElementById(id)?.value||'',support={level:level.value,teacherNote:val('fuTeacherNote'),privateNote:val('fuPrivateNote'),goal:val('fuGoal'),praise:val('fuPraise'),enrichmentPlan:val('fuEnrichment'),enrichmentTasks:val('fuEnrichmentTasks'),remedialPlan:val('fuRemedial'),remedialTasks:val('fuRemedialTasks'),contactNeeded:!!document.getElementById('fuContact')?.checked};if(window.opener)window.opener.postMessage({type:'quran-update-support',studentUid:row.id,support},'*');const all=row.report||{};all.support={...(all.support||{}),...support};for(const sm of all.semesters||[])if(sm)sm.support={...(sm.support||{}),...support};sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));document.getElementById('followupSaved').textContent='تم الحفظ';setTimeout(()=>{const x=document.getElementById('followupSaved');if(x)x.textContent=''},1800)}}
 function renderTeacherPreviewRow(row){
- const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,history=(row.teacherHistory||[]).map(x=>`<div class="history-item"><div>${escapeHtml(x.text||'')}</div><div class="muted">${new Date(x.at).toLocaleString('ar-SA')}</div></div>`).join('');
- reportsBox.innerHTML=`<section><h2>${escapeHtml(row.full_name||all.name||rep.name||'الطالب')} <button type="button" id="renameStudentBtn">تعديل الاسم</button></h2><p class="muted">الشعبة: ${escapeHtml(rep.section||all.section||'—')}</p><div class="card"><b>تقارير المتابعة</b><p class="muted">التقرير المختصر يعرض أهم المؤشرات، والموسع يعرض السجل اليومي والإحصاءات والتفاصيل والترتيب.</p></div>${renderControls()}<div id="activeReport" class="report-view"><div class="report-view-title"><h3 id="activeReportTitle">${reportMode==='expanded'?'التقرير الموسع':'التقرير المختصر'}</h3><span class="muted">الفصل ${reportSemester===0?'الأول':'الثاني'} — الفترة ${reportPeriod===0?'الأولى':'الثانية'}</span></div>${renderFollowup(rep)}${renderQuran(rep.quran)}${renderCourse('الدراسات الإسلامية','islamic',rep.islamic,rep.courseRanks?.islamic)}${renderCourse('التجويد','tajweed',rep.tajweed,rep.courseRanks?.tajweed)}${renderCourse('المهارات الحياتية','life',rep.life,rep.courseRanks?.life)}${renderTimeline(rep)}</div>${teacherFollowupEditor(row,rep)}<details class="card"><summary>ملاحظات المعلم الداخلية وسجل التغييرات</summary>${rep.support?.privateNote?'<p>'+escapeHtml(rep.support.privateNote)+'</p>':''}${history||'<p class="muted">لا توجد أحداث.</p>'}</details><button type="button" onclick="window.print()">طباعة التقرير</button></section>`;
- wireReportControls(()=>renderTeacherPreviewRow(row));applyReportMode();
- const rb=document.getElementById('renameStudentBtn');if(rb)rb.onclick=()=>{const current=row.full_name||all.name||rep.name||'',n=prompt('اسم الطالب:',current);if(n&&n.trim()){row.full_name=n.trim();if(all.name!==undefined)all.name=n.trim();for(const sm of all.semesters||[])if(sm)sm.name=n.trim();sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));if(window.opener)window.opener.postMessage({type:'quran-rename-student',studentUid:row.id,name:n.trim()},'*');renderTeacherPreviewRow(row)}};
- wireTeacherFollowup(row,()=>renderTeacherPreviewRow(row));
- if(new URLSearchParams(location.search).get('section')==='followup')setTimeout(()=>document.getElementById('teacherFollowup')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
+  const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,history=(row.teacherHistory||[]).map(x=>`<div class="card"><div>${escapeHtml(x.text||'')}</div><div class="muted">${new Date(x.at).toLocaleString('ar-SA')}</div></div>`).join('');
+  reportsBox.innerHTML=`<section><h2>${escapeHtml(row.full_name||all.name||rep.name||'الطالب')} <button type="button" id="renameStudentBtn" class="secondary">تعديل الاسم</button></h2><p class="muted">الشعبة: ${escapeHtml(rep.section||all.section||'—')} — هذه معاينة لما يراه ولي الأمر.</p></section><section>${renderControls()}${renderReportBody(rep)}</section>${teacherFollowupEditor(row,rep)}<section><details><summary>ملاحظات المعلم الداخلية وسجل التغييرات</summary>${rep.support?.privateNote?'<p>'+escapeHtml(rep.support.privateNote)+'</p>':''}${history||'<p class="muted">لا توجد أحداث.</p>'}</details><button type="button" class="no-print" onclick="window.print()">طباعة التقرير</button></section>`;
+  wireReportControls(()=>renderTeacherPreviewRow(row));
+  const rb=document.getElementById('renameStudentBtn');if(rb)rb.onclick=()=>{const current=row.full_name||all.name||rep.name||'',nm=prompt('اسم الطالب:',current);if(nm&&nm.trim()){row.full_name=nm.trim();if(all.name!==undefined)all.name=nm.trim();for(const sm of all.semesters||[])if(sm)sm.name=nm.trim();sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));if(window.opener)window.opener.postMessage({type:'quran-rename-student',studentUid:row.id,name:nm.trim()},'*');renderTeacherPreviewRow(row)}};
+  wireTeacherFollowup(row);
+  if(new URLSearchParams(location.search).get('section')==='followup')setTimeout(()=>document.getElementById('teacherFollowup')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
 }
 function renderTeacherPreview(){
- const raw=sessionStorage.getItem('quran-student-page-preview');if(!raw)return false;let row;try{row=JSON.parse(raw)}catch(_){return false}
- __teacherPreviewRow=row;reportSemester=Number(row.activeSemester??reportSemester);authBox.style.display='none';reportsBox.style.display='block';renderTeacherPreviewRow(row);return true
+  const raw=sessionStorage.getItem('quran-student-page-preview');if(!raw)return false;let row;try{row=JSON.parse(raw)}catch(_){return false}
+  __teacherPreviewRow=row;reportSemester=Number(row.activeSemester??reportSemester);authBox.style.display='none';reportsBox.style.display='block';renderTeacherPreviewRow(row);return true;
 }
-function logoutButton(){
-  const b=document.createElement('button');
-  b.type='button'; b.textContent='تسجيل الخروج'; b.className='secondary';
-  b.onclick=async()=>{ await supa.auth.signOut(); location.reload(); };
-  return b;
-}
-function showMessage(html){
-  reportsBox.innerHTML=`<section>${html}</section>`;
-  reportsBox.querySelector('section').appendChild(logoutButton());
-}
-function loadKnown(){ try{ return JSON.parse(localStorage.getItem(KNOWN_KEY))||[]; }catch(_){ return []; } }
-function saveKnown(ids){ try{ localStorage.setItem(KNOWN_KEY, JSON.stringify(ids)); }catch(_){} }
 
-let __parentRows=[], __parentNotice='';
+// ---------- الدخول والربط ----------
+function logoutButton(){const b=document.createElement('button');b.type='button';b.textContent='تسجيل الخروج';b.className='secondary';b.onclick=async()=>{await supa.auth.signOut();location.reload()};return b}
+function showMessage(html){reportsBox.innerHTML=`<section>${html}</section>`;reportsBox.querySelector('section').appendChild(logoutButton())}
+function loadKnown(){try{return JSON.parse(localStorage.getItem(KNOWN_KEY))||[]}catch(_){return []}}
+function saveKnown(ids){try{localStorage.setItem(KNOWN_KEY,JSON.stringify(ids))}catch(_){}}
+
+let __parentRows=[],__parentNotice='';
 function renderParentView(){
-  const rows=__parentRows;
-  let sel=null; try{ sel=localStorage.getItem(SELECTED_KEY); }catch(_){}
+  const rows=__parentRows;let sel=lsGet(SELECTED_KEY,null);
   const row=rows.find(r=>r.id===sel)||rows[0];
-  const switcher=rows.length>1?`<section><label style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>اختر الابن:</b><select id="childSelect" style="font:inherit;padding:8px;border:1px solid #aac1b4;border-radius:7px;min-width:220px">${rows.map(r=>`<option value="${escapeHtml(r.id)}"${r.id===row.id?' selected':''}>${escapeHtml(r.full_name||r.report?.name||'طالب')}</option>`).join('')}</select></label></section>`:'';
-  const notice=__parentNotice?`<section><div class="card warning-card">${__parentNotice}</div></section>`:'';
+  const switcher=rows.length>1?`<section><label><b>اختر الابن:</b><select id="childSelect">${rows.map(r=>`<option value="${escapeHtml(r.id)}"${r.id===row.id?' selected':''}>${escapeHtml(r.full_name||r.report?.name||'طالب')}</option>`).join('')}</select></label></section>`:'';
+  const notice=__parentNotice?`<section><div class="card warn">${__parentNotice}</div></section>`:'';
   reportsBox.innerHTML=notice+switcher+renderStudentCard(row);
   const cs=document.getElementById('childSelect');
-  if(cs) cs.onchange=()=>{ try{ localStorage.setItem(SELECTED_KEY, cs.value); }catch(_){} __parentNotice=''; renderParentView(); };
+  if(cs)cs.onchange=()=>{lsSet(SELECTED_KEY,cs.value);__parentNotice='';renderParentView()};
   wireReportControls(renderParentView);
   wireParentChats();
-  const wrap=document.createElement('section'); wrap.appendChild(logoutButton()); reportsBox.appendChild(wrap);
+  const wrap=document.createElement('section');wrap.className='no-print';wrap.appendChild(logoutButton());reportsBox.appendChild(wrap);
 }
 
 async function showReports(){
-  authBox.style.display='none';
-  reportsBox.style.display='block';
+  authBox.style.display='none';reportsBox.style.display='block';
   reportsBox.innerHTML='<section><p class="muted">جارٍ التحميل...</p></section>';
-
-  const { data: teacherFlag } = await supa.rpc('is_teacher');
-  if(teacherFlag === true){
-    showMessage('<p class="error">أنت مسجّل الآن بحساب المعلم. سجّل الخروج ثم ادخل بحساب ولي الأمر.</p>');
-    return;
-  }
-
-  const code=pendingCode();
-  let linkError=null;
-  if(code){
-    const { error } = await supa.rpc('redeem_link_code', { p_code: code });
-    clearPendingCode();
-    if(error) linkError=error.message;
-  }
-
-  const { data, error } = await supa.from('students_public').select('*');
-  if(error){ showMessage(`<p class="error">تعذّر جلب البيانات: ${escapeHtml(error.message)}</p>`); return; }
+  const {data:teacherFlag}=await supa.rpc('is_teacher');
+  if(teacherFlag===true){showMessage('<p class="error">أنت مسجّل الآن بحساب المعلم. سجّل الخروج ثم ادخل بحساب ولي الأمر.</p>');return}
+  const code=pendingCode();let linkError=null;
+  if(code){const {error}=await supa.rpc('redeem_link_code',{p_code:code});clearPendingCode();if(error)linkError=error.message}
+  const {data,error}=await supa.from('students_public').select('*');
+  if(error){showMessage(`<p class="error">تعذّر جلب البيانات: ${escapeHtml(error.message)}</p>`);return}
   const rows=data||[];
-
   if(!rows.length){
-    if(linkError) showMessage(`<p class="error">تعذّر ربط الحساب: ${escapeHtml(linkError)}</p><p class="muted">اطلب من المعلم رمزًا جديدًا.</p>`);
+    if(linkError)showMessage(`<p class="error">تعذّر ربط الحساب: ${escapeHtml(linkError)}</p><p class="muted">اطلب من المعلم رمزًا جديدًا.</p>`);
     else showMessage('<p class="muted">لا يوجد أي طالب مرتبط بحسابك بعد. امسح باركود الطالب الذي أعطاك إياه المعلم.</p>');
     return;
   }
-
-  const known=loadKnown();
-  const fresh=rows.find(r=>!known.includes(r.id));
-  if(fresh && code && !linkError){ try{ localStorage.setItem(SELECTED_KEY, fresh.id); }catch(_){} }
+  const known=loadKnown(),fresh=rows.find(r=>!known.includes(r.id));
+  if(fresh&&code&&!linkError)lsSet(SELECTED_KEY,fresh.id);
   saveKnown(rows.map(r=>r.id));
-
-  __parentNotice = linkError ? 'هذا الرابط استُخدم من قبل أو انتهت صلاحيته. إذا كان لابنك المعروض أدناه فلا مشكلة، فحسابك مربوط به. وإذا كان لابن آخر فاطلب من المعلم رمزًا جديدًا.' : '';
-  __parentRows=rows;
-  renderParentView();
-  for(const row of rows) supa.rpc('mark_report_viewed',{p_student_id:row.id}).then(()=>{},()=>{});
+  __parentNotice=linkError?'هذا الرابط استُخدم من قبل أو انتهت صلاحيته. إذا كان لابنك المعروض أدناه فلا مشكلة، فحسابك مربوط به. وإذا كان لابن آخر فاطلب من المعلم رمزًا جديدًا.':'';
+  __parentRows=rows;renderParentView();
+  for(const row of rows)supa.rpc('mark_report_viewed',{p_student_id:row.id}).then(()=>{},()=>{});
 }
 
 function friendlyAuthError(m){
-  if(m==='Invalid login credentials') return 'البريد أو كلمة المرور غير صحيحة.';
-  if(/already registered/i.test(m)) return 'هذا البريد مسجّل من قبل، اختر «لديّ حساب».';
-  if(/Password should be/i.test(m)) return 'كلمة المرور قصيرة، اكتب 6 خانات على الأقل.';
+  if(m==='Invalid login credentials')return 'البريد أو كلمة المرور غير صحيحة.';
+  if(/already registered/i.test(m))return 'هذا البريد مسجّل من قبل، اختر «لديّ حساب».';
+  if(/Password should be/i.test(m))return 'كلمة المرور قصيرة، اكتب 6 خانات على الأقل.';
   return m;
 }
-
 function renderAuthForm(mode){
   const hasCode=!!pendingCode();
-  authBox.innerHTML = `
-    <section>
-      <div class="tabs">
-        <button id="tabLogin" class="${mode==='login'?'active':''}" type="button">لديّ حساب</button>
-        <button id="tabSignup" class="${mode==='signup'?'active':''}" type="button">حساب جديد</button>
-      </div>
-      ${hasCode ? '<p class="muted">تم حفظ رمز الطالب، وسيُربط بحسابك تلقائيًا بعد تسجيل الدخول أو إنشاء الحساب.</p>' : ''}
-      <input id="paEmail" type="email" placeholder="البريد الإلكتروني">
-      <input id="paPass" type="password" placeholder="كلمة المرور">
-      <button id="paSubmit" type="button">${mode==='login'?'تسجيل الدخول':'إنشاء الحساب'}</button>
-      <p id="paMsg" class="error"></p>
-    </section>`;
-  document.getElementById('tabLogin').onclick = () => renderAuthForm('login');
-  document.getElementById('tabSignup').onclick = () => renderAuthForm('signup');
-  document.getElementById('paSubmit').onclick = async () => {
-    const email = document.getElementById('paEmail').value.trim();
-    const password = document.getElementById('paPass').value;
-    const msg = document.getElementById('paMsg');
-    if(!email || !password){ msg.textContent = 'أدخل البريد وكلمة المرور.'; return; }
-    msg.textContent = 'جارٍ المعالجة...'; msg.classList.remove('error');
-    if(mode === 'login'){
-      const { error } = await supa.auth.signInWithPassword({ email, password });
-      if(error){ msg.textContent = friendlyAuthError(error.message); msg.classList.add('error'); return; }
-      showReports(); return;
-    }
-    const { data, error } = await supa.auth.signUp({ email, password, options:{ emailRedirectTo: location.origin + location.pathname } });
-    if(error){ msg.textContent = friendlyAuthError(error.message); msg.classList.add('error'); return; }
-    if(data && data.session){ showReports(); return; }
-    msg.textContent = 'أرسلنا رسالة تأكيد إلى بريدك. افتحها من هذا الجهاز نفسه، وسيُربط ابنك تلقائيًا بعد الدخول.';
+  authBox.innerHTML=`<div class="tabs"><button id="tabLogin" class="${mode==='login'?'active':'secondary'}" type="button">لديّ حساب</button><button id="tabSignup" class="${mode==='signup'?'active':'secondary'}" type="button">حساب جديد</button></div>
+    ${hasCode?'<p class="muted">تم حفظ رمز الطالب، وسيُربط بحسابك تلقائيًا بعد تسجيل الدخول أو إنشاء الحساب.</p>':''}
+    <input id="paEmail" type="email" placeholder="البريد الإلكتروني" autocomplete="email">
+    <input id="paPass" type="password" placeholder="كلمة المرور" autocomplete="${mode==='login'?'current-password':'new-password'}">
+    <button id="paSubmit" type="button">${mode==='login'?'تسجيل الدخول':'إنشاء الحساب'}</button>
+    <p id="paMsg" class="error"></p>`;
+  document.getElementById('tabLogin').onclick=()=>renderAuthForm('login');
+  document.getElementById('tabSignup').onclick=()=>renderAuthForm('signup');
+  document.getElementById('paSubmit').onclick=async()=>{
+    const email=document.getElementById('paEmail').value.trim(),password=document.getElementById('paPass').value,msg=document.getElementById('paMsg');
+    if(!email||!password){msg.textContent='أدخل البريد وكلمة المرور.';return}
+    msg.textContent='جارٍ المعالجة...';msg.classList.remove('error');
+    if(mode==='login'){const {error}=await supa.auth.signInWithPassword({email,password});if(error){msg.textContent=friendlyAuthError(error.message);msg.classList.add('error');return}showReports();return}
+    const {data,error}=await supa.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});
+    if(error){msg.textContent=friendlyAuthError(error.message);msg.classList.add('error');return}
+    if(data&&data.session){showReports();return}
+    msg.textContent='أرسلنا رسالة تأكيد إلى بريدك. افتحها من هذا الجهاز نفسه، وسيُربط ابنك تلقائيًا بعد الدخول.';
   };
 }
 
-const teacherPreview = new URLSearchParams(location.search).get('preview')==='1' && renderTeacherPreview();
-if(!teacherPreview) (async () => {
-  if(/^ضع_/.test(SUPABASE_URL) || /^ضع_/.test(SUPABASE_ANON_KEY)){
-    authBox.innerHTML = '<section><p class="error">لم تُعبَّأ إعدادات Supabase في هذا الملف بعد.</p></section>';
-    return;
-  }
-  try{
-    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }catch(err){
-    authBox.innerHTML = '<section><p class="error">تعذّر الاتصال بـ Supabase: ' + escapeHtml(err.message) + '</p></section>';
-    return;
-  }
-  const { data } = await supa.auth.getSession();
-  if(data.session) showReports(); else renderAuthForm(pendingCode() ? 'signup' : 'login');
+const teacherPreview=new URLSearchParams(location.search).get('preview')==='1'&&renderTeacherPreview();
+if(!teacherPreview)(async()=>{
+  try{supa=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY)}catch(err){authBox.innerHTML='<p class="error">تعذّر الاتصال: '+escapeHtml(err.message)+'</p>';return}
+  const {data}=await supa.auth.getSession();
+  if(data.session)showReports();else renderAuthForm(pendingCode()?'signup':'login');
 })();
 </script>
-</body></html>
+</body>
+</html>
