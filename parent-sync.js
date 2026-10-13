@@ -192,7 +192,7 @@ const FS_FIELD_LABELS = {
   holidays: 'الإجازات', approvals: 'الاعتمادات', actual: 'الموعد الفعلي', view: 'الكشف المعروض', max: 'الدرجة العظمى',
   sections: 'الشعب', activeSection: 'الشعبة النشطة', activeSubject: 'المادة النشطة', coursework: 'درجات المواد',
   quranShare: 'نصيب القرآن', auditLog: 'سجل التعديلات', archives: 'الأرشيف', lastBackupAt: 'آخر نسخة احتياطية',
-  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية'
+  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية', violationNotices: 'سجل إشعارات المخالفات'
 };
 function fsSize(v) { const t = fsType(v); return t === 'array' ? v.length : t === 'object' ? Object.keys(v).length : t === 'undefined' ? '—' : 'قيمة'; }
 
@@ -1333,6 +1333,124 @@ function wnPrint() {
   win.document.write(html); win.document.close();
 }
 
+
+// ============================================================
+// إشعار المخالفات لأولياء الأمور (متى شاء المعلم)
+// يرسل المخالفات الجديدة فقط منذ آخر إشعار لكل طالب ومادة وفترة، بعد مراجعة المعلم واعتماده.
+// ============================================================
+const VN_SUBJECTS = [['islamic', 'الدراسات الإسلامية'], ['tajweed', 'التجويد']];
+const vnState = { items: [] };
+function vnTimesWord(n) { return n === 1 ? 'مرة واحدة' : n === 2 ? 'مرتان' : n + ' مرات'; }
+
+function vnCompute(t, p) {
+  const app = window.__app, db = app.db, out = [];
+  const sentAll = db.violationNotices || {};
+  for (const [subject, title] of VN_SUBJECTS) {
+    const defs = (app.courseDefs[subject] || []).filter(d => d.violation);
+    if (!defs.length) continue;
+    const studs = db.students.filter(s => (s.subject || 'quran') === subject && (s.status || 'active') === 'active');
+    for (const s of studs) {
+      const all = [], fresh = [];
+      for (const d of defs) for (let i = 0; i < d.count; i++) {
+        const k = [subject, t, p, s.id, d.id, i].join('|');
+        if (Number(db.coursework[k]) > 0) { all.push({ k, d }); }
+      }
+      if (!all.length) continue;
+      const tag = [s.studentUid, subject, t, p].join('|'), sent = new Set((sentAll[tag] && sentAll[tag].keys) || []);
+      for (const x of all) if (!sent.has(x.k)) fresh.push(x);
+      if (!fresh.length) continue;
+      const count = list => { const m = new Map(); for (const x of list) m.set(x.d.name, (m.get(x.d.name) || 0) + 1); return [...m.entries()]; };
+      out.push({ uid: s.studentUid, name: app.cleanName(s.name), section: s.section || db.sections[0], subject, title, tag, all, fresh, freshCounts: count(fresh), total: all.length, deduction: Math.min(5, Math.floor(all.length / 2)) });
+    }
+  }
+  return out.sort((a, b) => a.section.localeCompare(b.section, 'ar') || a.name.localeCompare(b.name, 'ar'));
+}
+
+function vnText(it, t, p) {
+  return ['إشعار مخالفات — ' + it.title,
+    'الطالب: ' + it.name + ' — ' + it.section,
+    'الفصل ' + (t + 1) + ' — الفترة ' + (p + 1),
+    '',
+    'سُجّل على ابنكم:',
+    ...it.freshCounts.map(([n, c]) => '• ' + n + ': ' + vnTimesWord(c)),
+    '',
+    'مجموع مخالفاته في هذه الفترة: ' + it.total + '، وكل مخالفتين تُحسم منهما درجة واحدة' + (it.deduction ? ' (المحسوم حتى الآن: ' + it.deduction + ')' : '') + '.',
+    'نأمل تعاونكم في توجيهه، شاكرين حرصكم.',
+    '',
+    'معلم المادة'].join('\n');
+}
+
+function vnRender(host) {
+  const app = window.__app; if (!app || !host) return;
+  const a = app.db.actual;
+  const box = document.createElement('div'); box.className = 'summary-card';
+  box.innerHTML = `<details id="vnDetails"><summary><b>إشعار المخالفات لأولياء الأمور</b></summary>
+    <p class="muted">يعرض المخالفات الجديدة فقط منذ آخر إشعار لكل طالب، في الدراسات الإسلامية والتجويد. راجع النص، ثم «اعتماد وإرسال». يمكنك الإرسال في أي يوم.</p>
+    <label>الفصل <select id="vnT"><option value="0">الأول</option><option value="1">الثاني</option></select></label>
+    <label>الفترة <select id="vnP"><option value="0">الأولى</option><option value="1">الثانية</option></select></label>
+    <button id="vnBuild" type="button">عرض المخالفات الجديدة</button>
+    <div id="vnOut" style="overflow-x:auto;margin-top:10px"></div></details>`;
+  host.appendChild(box);
+  box.querySelector('#vnT').value = a.t; box.querySelector('#vnP').value = a.p;
+  box.querySelector('#vnBuild').onclick = () => vnBuild(box);
+}
+
+async function vnBuild(box) {
+  const t = +box.querySelector('#vnT').value, p = +box.querySelector('#vnP').value, out = box.querySelector('#vnOut');
+  out.textContent = 'جارٍ التجهيز...';
+  const list = vnCompute(t, p);
+  const links = await wnLoadLinks();
+  out.replaceChildren(); vnState.items = []; vnState.tp = { t, p };
+  if (!list.length) { out.textContent = 'لا توجد مخالفات جديدة لم يُرسل عنها إشعار.'; return; }
+  if (!links) { const w = document.createElement('p'); w.style.color = '#b42318'; w.textContent = 'تعذّرت معرفة أولياء الأمور المرتبطين (سجّل الدخول من «بوابة أولياء الأمور»). يمكنك المراجعة الآن والإرسال بعد تسجيل الدخول.'; out.appendChild(w); }
+  const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:720px';
+  tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>الطالب</th><th>المادة</th><th>الجديد</th><th>ولي الأمر</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+  for (const it of list) {
+    const parents = links ? (links.get(it.uid) || []) : null;
+    const tr = document.createElement('tr');
+    const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb);
+    const c1 = document.createElement('td'); c1.textContent = it.name + ' — ' + it.section;
+    const c2 = document.createElement('td'); c2.textContent = it.title;
+    const c3 = document.createElement('td'); c3.textContent = it.freshCounts.map(([n, c]) => n + ' (' + c + ')').join('، ');
+    const c4 = document.createElement('td'); c4.textContent = parents === null ? 'غير معروف' : parents.length ? 'مرتبط' : 'لا يوجد ولي أمر مرتبط';
+    const c5 = document.createElement('td'), ta = document.createElement('textarea'); ta.value = vnText(it, t, p); ta.rows = 8; ta.style.cssText = 'width:100%;min-width:300px;font:13px Tahoma'; c5.appendChild(ta);
+    tr.append(c0, c1, c2, c3, c4, c5); tb.tBodies[0].appendChild(tr);
+    vnState.items.push({ it, cb, ta, parents });
+  }
+  out.appendChild(tb);
+  const send = document.createElement('button'); send.type = 'button'; send.textContent = 'اعتماد وإرسال المحدد';
+  const st = document.createElement('p'); st.className = 'muted'; st.id = 'vnStatus';
+  send.onclick = () => vnSend(box, st);
+  out.append(send, st);
+}
+
+async function vnSend(box, st) {
+  const app = window.__app, db = app.db;
+  const chosen = vnState.items.filter(x => x.cb.checked && !x.cb.disabled);
+  if (!chosen.length) { st.textContent = 'لم تحدد أي طالب.'; return; }
+  if (chosen.some(x => x.parents === null)) { st.textContent = 'سجّل الدخول من «بوابة أولياء الأمور» أولًا، ثم أعد العرض.'; return; }
+  if (!confirm('سيُرسل إشعار مخالفات إلى أولياء أمور ' + chosen.length + ' طالبًا. متابعة؟')) return;
+  db.violationNotices = db.violationNotices || {};
+  let ok = 0, fail = 0;
+  for (const x of chosen) {
+    const body = x.ta.value.trim(); if (!body) continue;
+    let good = true;
+    for (const pu of x.parents) {
+      const { error } = await supa.from('parent_messages').insert({ student_id: x.it.uid, parent_uid: pu, sender_role: 'teacher', body });
+      if (error) { good = false; break; }
+    }
+    if (good) {
+      const prev = (db.violationNotices[x.it.tag] && db.violationNotices[x.it.tag].keys) || [];
+      db.violationNotices[x.it.tag] = { keys: [...new Set([...prev, ...x.it.fresh.map(f => f.k)])], at: new Date().toISOString() };
+      ok++;
+    } else fail++;
+  }
+  app.save();
+  const msg = '✓ أُرسل ' + ok + (fail ? ' — تعذّر ' + fail : '') + '. تظهر لك حالة القراءة في «رسائل أولياء الأمور».';
+  await vnBuild(box);
+  const s2 = box.querySelector('#vnStatus'); if (s2) s2.textContent = msg; else { const p = document.createElement('p'); p.textContent = msg; box.querySelector('#vnOut').appendChild(p); }
+}
+
 // ============================================================
 // المزامنة التلقائية الآمنة
 // القاعدة: نقل كامل فقط، ولا يحدث تلقائيًا إلا إذا تغيّر طرف واحد منذ آخر مزامنة:
@@ -1499,6 +1617,7 @@ async function renderParentTab(root) {
   root.querySelector('#paLogout').onclick=async()=>{await supa.auth.signOut();loginBox(root,'parentPortal');};
   root.querySelector('#paSyncAll').onclick=()=>syncReports(root,students);
   wnRender(root.querySelector('#wnHost'));
+  vnRender(root.querySelector('#wnHost'));
 
   let linked=new Set();
   let lastView=new Map();
