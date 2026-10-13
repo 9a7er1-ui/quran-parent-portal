@@ -96,6 +96,9 @@
   .weekly{border:2px solid var(--green)}
   .weekly .meta{font-size:.88rem;color:var(--muted)}
   .ack-done{color:var(--good);font-weight:700}
+  .pledge{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}
+  .pledge-check{display:flex;gap:10px;align-items:flex-start;font-weight:500;line-height:1.7}
+  .pledge-check input{width:22px;height:22px;margin:4px 0 0;flex:none}
 
   /* المحادثة */
   .chat{max-height:380px;overflow:auto;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:8px}
@@ -150,7 +153,8 @@ const reportsBox = document.getElementById('reportsBox');
 const PENDING_CODE_KEY = 'parent-pending-code';
 const KNOWN_KEY = 'parent-known-students';
 const SELECTED_KEY = 'parent-selected-student';
-const WEEKLY_PREFIXES = ['الخطة العلاجية الأسبوعية', 'خطاب شكر وعرفان'];
+const WEEKLY_PREFIXES = ['الخطة العلاجية الأسبوعية', 'خطة علاجية', 'خطاب شكر وعرفان', 'إشعار مخالفات'];
+const WEEKLY_DAYS = 10, WEEKLY_UNACK_DAYS = 30;
 (function captureCode(){
   const p = new URLSearchParams(location.search);
   const c = p.get('code');
@@ -328,14 +332,31 @@ function wireReportControls(rerender){
 function chatTime(v){try{return new Date(v).toLocaleString('ar-SA')}catch(_){return v||''}}
 function isWeeklyMsg(m){return m.sender_role==='teacher'&&WEEKLY_PREFIXES.some(p=>String(m.body||'').startsWith(p))}
 
+function noticeKind(body){const b=String(body||'');if(b.startsWith('خطاب شكر'))return 'thanks';if(b.startsWith('إشعار مخالفات'))return 'violation';return 'plan'}
 function renderWeekly(slot,msgs){
-  const latest=(msgs||[]).filter(isWeeklyMsg).slice(-1)[0];
-  if(!latest){slot.innerHTML='';return}
-  const thanks=String(latest.body).startsWith('خطاب شكر');
-  const ack=latest.acknowledged_at?`<p class="ack-done">✓ أقررتم بالاطلاع في ${chatTime(latest.acknowledged_at)}</p>`:`<button type="button" class="ack-btn">${thanks?'اطّلعت، شكرًا لكم':'اطّلعت على الخطة وسأتابع ابني'}</button><p class="muted">ضغطكم هذا الزر يُبلغ المعلم بأنكم اطّلعتم.</p>`;
-  slot.innerHTML=`<section class="weekly ${thanks?'':''}"><h3>${thanks?'🌟 من المعلم هذا الأسبوع':'📌 من المعلم هذا الأسبوع'}</h3><p class="meta">أُرسلت في ${chatTime(latest.created_at)}</p><div class="card ${thanks?'good':'warn'}"><div class="plan">${escapeHtml(latest.body)}</div></div>${ack}</section>`;
-  const btn=slot.querySelector('.ack-btn');
-  if(btn)btn.onclick=async()=>{btn.disabled=true;btn.textContent='جارٍ الإرسال...';const {error}=await supa.rpc('acknowledge_message',{p_id:String(latest.id)});if(error){btn.disabled=false;btn.textContent='تعذّر الإرسال، أعد المحاولة';return}latest.acknowledged_at=new Date().toISOString();renderWeekly(slot,msgs)};
+  const now=Date.now(),day=86400000;
+  const all=(msgs||[]).filter(isWeeklyMsg);
+  // لكل نوع ومادة (السطر الأول من الرسالة) آخر رسالة فقط، خلال الأيام الأخيرة، أو الأقدم إن لم يُقرّ بها بعد
+  const latest=new Map();
+  for(const m of all){const key=String(m.body).split('\n')[0].trim();const prev=latest.get(key);if(!prev||new Date(m.created_at)>new Date(prev.created_at))latest.set(key,m)}
+  const list=[...latest.values()].filter(m=>{const age=now-new Date(m.created_at).getTime();return age<=WEEKLY_DAYS*day||(!m.acknowledged_at&&age<=WEEKLY_UNACK_DAYS*day)}).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  if(!list.length){slot.innerHTML='';return}
+  const pending=list.filter(m=>!m.acknowledged_at).length;
+  slot.innerHTML=`<section class="weekly"><h3>📌 من المعلم هذا الأسبوع${list.length>1?` (${n(list.length)})`:''}</h3>${pending?`<p class="meta">بانتظار اطلاعكم: ${n(pending)}</p>`:'<p class="ack-done">✓ اطّلعتم على جميع الرسائل</p>'}<div class="notices"></div></section>`;
+  const host=slot.querySelector('.notices');
+  for(const m of list){
+    const kind=noticeKind(m.body),wrap=document.createElement('div'),needsPledge=kind!=='thanks';
+    const pledge=kind==='violation'?'أتعهد بتوجيه ابني والتعاون مع المعلم في معالجة هذه المخالفات':'أتعهد بمتابعة تنفيذ هذه الخطة مع ابني';
+    let ackHtml;
+    if(m.acknowledged_at)ackHtml=`<p class="ack-done">✓ ${needsPledge?'أقررتم وتعهدتم':'أقررتم بالاطلاع'}${m.ack_name?` باسم: ${escapeHtml(m.ack_name)}`:''} — ${chatTime(m.acknowledged_at)}</p>`;
+    else if(needsPledge)ackHtml=`<div class="pledge"><label class="pledge-check"><input type="checkbox" class="pl-ok"> ${pledge}</label><input type="text" class="pl-name" maxlength="80" placeholder="اكتب اسم ولي الأمر" autocomplete="name"><button type="button" class="ack-btn" disabled>اعتماد الإقرار والتعهد</button><p class="meta">يُسجَّل اسمكم ووقت الاعتماد، ويصل إلى المعلم.</p></div>`;
+    else ackHtml=`<button type="button" class="ack-btn">اطّلعت، شكرًا لكم</button>`;
+    wrap.innerHTML=`<div class="card ${kind==='thanks'?'good':'warn'}"><div class="plan">${escapeHtml(m.body)}</div><p class="meta">أُرسلت في ${chatTime(m.created_at)}</p>${ackHtml}</div>`;
+    const btn=wrap.querySelector('.ack-btn'),ok=wrap.querySelector('.pl-ok'),nm=wrap.querySelector('.pl-name');
+    if(btn&&needsPledge){const upd=()=>{btn.disabled=!(ok.checked&&nm.value.trim().length>=3)};ok.onchange=upd;nm.oninput=upd}
+    if(btn)btn.onclick=async()=>{const name=nm?nm.value.trim():'';if(needsPledge&&!(ok.checked&&name.length>=3))return;btn.disabled=true;btn.textContent='جارٍ الإرسال...';const {error}=await supa.rpc('acknowledge_message',{p_id:String(m.id),p_name:name||null});if(error){btn.disabled=false;btn.textContent='تعذّر الإرسال، أعد المحاولة';return}m.acknowledged_at=new Date().toISOString();m.ack_name=name||null;renderWeekly(slot,msgs)};
+    host.appendChild(wrap);
+  }
 }
 
 async function loadParentChat(card,studentId){

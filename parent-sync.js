@@ -192,7 +192,7 @@ const FS_FIELD_LABELS = {
   holidays: 'الإجازات', approvals: 'الاعتمادات', actual: 'الموعد الفعلي', view: 'الكشف المعروض', max: 'الدرجة العظمى',
   sections: 'الشعب', activeSection: 'الشعبة النشطة', activeSubject: 'المادة النشطة', coursework: 'درجات المواد',
   quranShare: 'نصيب القرآن', auditLog: 'سجل التعديلات', archives: 'الأرشيف', lastBackupAt: 'آخر نسخة احتياطية',
-  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية', violationNotices: 'سجل إشعارات المخالفات'
+  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية', violationNotices: 'سجل إشعارات المخالفات', courseNotices: 'سجل رسائل المشاركات والواجبات'
 };
 function fsSize(v) { const t = fsType(v); return t === 'array' ? v.length : t === 'object' ? Object.keys(v).length : t === 'undefined' ? '—' : 'قيمة'; }
 
@@ -1268,7 +1268,8 @@ async function wnBuild(host) {
 async function wnLoadReceipts(ids) {
   const m = new Map(); if (!ids.length || !wnState.links) return m;
   try {
-    let { data, error } = await supa.from('parent_messages').select('id,read_at,acknowledged_at').in('id', ids);
+    let { data, error } = await supa.from('parent_messages').select('id,read_at,acknowledged_at,ack_name').in('id', ids);
+    if (error) ({ data, error } = await supa.from('parent_messages').select('id,read_at,acknowledged_at').in('id', ids));
     if (error) ({ data, error } = await supa.from('parent_messages').select('id,read_at').in('id', ids));
     for (const r of data || []) m.set(String(r.id), r);
   } catch (_) {}
@@ -1285,7 +1286,8 @@ function wnReceiptText(v, receipts) {
   const fmt = x => new Date(x).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
   let t = '✓ أُرسل ' + fmt(v.at);
   const ack = rs.map(r => r.acknowledged_at).filter(Boolean).sort()[0], rd = rs.map(r => r.read_at).filter(Boolean).sort()[0];
-  if (ack) t += '\n✓ أقرّ بالاطلاع ' + fmt(ack);
+  const ackRow = rs.filter(r => r.acknowledged_at).sort((a, b) => a.acknowledged_at.localeCompare(b.acknowledged_at))[0];
+  if (ack) t += '\n✓ أقرّ' + (v.type === 'thanks' ? ' بالاطلاع ' : ' وتعهد ') + (ackRow && ackRow.ack_name ? 'باسم «' + ackRow.ack_name + '» ' : '') + fmt(ack);
   else if (rd) t += '\n✓ قرأها ' + fmt(rd) + ' (لم يضغط «اطّلعت»)';
   else t += '\n✗ لم يقرأها بعد (منذ ' + Math.max(1, Math.round((Date.now() - new Date(v.at)) / 3600000)) + ' ساعة)';
   return t;
@@ -1449,6 +1451,210 @@ async function vnSend(box, st) {
   const msg = '✓ أُرسل ' + ok + (fail ? ' — تعذّر ' + fail : '') + '. تظهر لك حالة القراءة في «رسائل أولياء الأمور».';
   await vnBuild(box);
   const s2 = box.querySelector('#vnStatus'); if (s2) s2.textContent = msg; else { const p = document.createElement('p'); p.textContent = msg; box.querySelector('#vnOut').appendChild(p); }
+}
+
+
+// ============================================================
+// خطط المشاركات والواجبات وخطابات الشكر (الدراسات الإسلامية، التجويد، المهارات الحياتية)
+// • «ما مضى» = الخانات التي رصدتها لطلاب الشعبة (خانة رُصدت لأحدهم تُعدّ ماضية للجميع، والفارغة للطالب = لم يؤدِّ).
+// • المرة الأولى: على كل ما مضى في الفترة. بعدها: على الخانات الجديدة منذ آخر إرسال فقط (واجبات الأسبوع).
+// • خطة علاجية لمن لم يتجاوز CN_THRESHOLD٪، وخطاب شكر لمن أخذ الدرجة الكاملة. لا يُرسل شيء قبل اعتماد المعلم.
+// ============================================================
+const CN_THRESHOLD = 30;
+const CN_SUBJECTS = [['islamic', 'الدراسات الإسلامية'], ['tajweed', 'التجويد'], ['life', 'المهارات الحياتية']];
+const CN_CATS = ['participation', 'homework'];
+const cnState = { items: {}, ctx: null };
+
+function cnPastColumns(subject, t, p, section) {
+  const app = window.__app, db = app.db, cols = {};
+  const studs = db.students.filter(s => (s.subject || 'quran') === subject && (s.section || db.sections[0]) === section && (s.status || 'active') === 'active');
+  for (const d of (app.courseDefs[subject] || []).filter(d => CN_CATS.includes(d.id))) {
+    cols[d.id] = [];
+    for (let i = 0; i < d.count; i++) if (studs.some(s => db.coursework[[subject, t, p, s.id, d.id, i].join('|')] !== undefined)) cols[d.id].push(i);
+  }
+  return { cols, studs };
+}
+function cnSnapKey(subject, t, p, section) { return [subject, t, p, section].join('|'); }
+
+function cnCompute(t, p) {
+  const app = window.__app, db = app.db, notes = db.courseNotices || {}, snaps = notes.snap || {};
+  const groups = [];
+  for (const [subject, title] of CN_SUBJECTS) {
+    const defs = (app.courseDefs[subject] || []).filter(d => CN_CATS.includes(d.id));
+    if (!defs.length) continue;
+    for (const section of db.sections) {
+      const { cols, studs } = cnPastColumns(subject, t, p, section);
+      if (!studs.length) continue;
+      const sk = cnSnapKey(subject, t, p, section), snap = snaps[sk];
+      const mode = snap ? 'new' : 'all';
+      const use = {};
+      for (const d of defs) use[d.id] = (cols[d.id] || []).filter(i => !snap || !(snap[d.id] || []).includes(i));
+      const nCols = defs.reduce((a, d) => a + use[d.id].length, 0);
+      const g = { subject, title, section, mode, sk, cols, use, nCols, remedial: [], thanks: [], middle: 0, defs };
+      if (nCols) {
+        for (const s of studs) {
+          const parts = defs.map(d => {
+            let got = 0; const idx = use[d.id];
+            for (const i of idx) got += Number(db.coursework[[subject, t, p, s.id, d.id, i].join('|')] || 0);
+            return { name: d.name, got, max: idx.length * d.max, cnt: idx.length, done: idx.filter(i => Number(db.coursework[[subject, t, p, s.id, d.id, i].join('|')] || 0) > 0).length };
+          }).filter(x => x.max > 0);
+          const got = parts.reduce((a, x) => a + x.got, 0), max = parts.reduce((a, x) => a + x.max, 0), pct = max ? got / max * 100 : 0;
+          const it = { uid: s.studentUid, name: app.cleanName(s.name), section, subject, title, parts, got, max, pct, mode };
+          if (pct <= CN_THRESHOLD) g.remedial.push(it); else if (got === max) g.thanks.push(it); else g.middle++;
+        }
+        const sort = (a, b) => a.name.localeCompare(b.name, 'ar');
+        g.remedial.sort(sort); g.thanks.sort(sort);
+      }
+      groups.push(g);
+    }
+  }
+  return groups;
+}
+
+function cnScopeText(it) { return it.mode === 'all' ? 'فيما رُصد منذ بداية الفترة' : 'فيما رُصد منذ آخر تقرير (هذا الأسبوع)'; }
+function cnRemedialText(it, t, p) {
+  const lines = it.parts.map(x => '• ' + x.name + ': ' + x.got + ' من ' + x.max + ' (أدّى ' + x.done + ' من ' + x.cnt + ')');
+  const needs = [];
+  const part = it.parts.find(x => x.name === 'المشاركة'), hw = it.parts.find(x => x.name === 'الواجبات');
+  if (hw && hw.done < hw.cnt) needs.push('حلّ الواجبات وتسليمها في موعدها؛ لم يُسلّم ' + (hw.cnt - hw.done) + ' من ' + hw.cnt + '.');
+  if (part && part.done < part.cnt) needs.push('المشاركة في الحصة؛ لم يشارك في ' + (part.cnt - part.done) + ' من ' + part.cnt + ' فرص.');
+  return ['خطة علاجية — المشاركات والواجبات — ' + it.title,
+    'الطالب: ' + it.name + ' — ' + it.section,
+    'الفصل ' + (t + 1) + ' — الفترة ' + (p + 1),
+    'نتيجته ' + cnScopeText(it) + ': ' + it.got + ' من ' + it.max + ' (' + Math.round(it.pct) + '٪)، ولم تتجاوز ' + CN_THRESHOLD + '٪.',
+    ...lines,
+    '',
+    'ما يحتاجه ابنكم:',
+    ...needs.map(x => '• ' + x),
+    '',
+    'المطلوب خلال الأسبوع القادم:',
+    '1. متابعة واجباته يوميًا والتأكد من حلها وإحضارها.',
+    '2. مراجعة الدرس معه في البيت ليستطيع المشاركة في الحصة.',
+    '3. تشجيعه على السؤال والمشاركة، وإبلاغ المعلم بأي صعوبة يواجهها.',
+    '',
+    'نسأل الله لابنكم التوفيق والسداد.'].join('\n');
+}
+function cnThanksText(it, t, p) {
+  return ['خطاب شكر وعرفان — ' + it.title,
+    'نتقدم بالشكر والتقدير لابنكم الطالب ' + it.name + ' (' + it.section + ')',
+    'على تميّزه في المشاركة وأداء الواجبات كاملة ' + cnScopeText(it) + ' (' + it.got + ' من ' + it.max + ').',
+    'ونشكر لكم متابعتكم وحرصكم، فهذا ثمرة جهدكم معه.',
+    'بارك الله فيه وزاده علمًا وتوفيقًا.',
+    '',
+    'معلم المادة'].join('\n');
+}
+
+function cnRender(host) {
+  const app = window.__app; if (!app || !host) return;
+  const a = app.db.actual;
+  const box = document.createElement('div'); box.className = 'summary-card';
+  box.innerHTML = `<details id="cnDetails"><summary><b>المشاركات والواجبات: الخطط العلاجية وخطابات الشكر</b></summary>
+    <p class="muted">لكل مادة وشعبة: أول مرة يُحسب على كل ما رُصد منذ بداية الفترة، وبعد كل إرسال يُحسب على الخانات الجديدة فقط (واجبات الأسبوع). خطة علاجية لمن لم يتجاوز ${CN_THRESHOLD}٪، وخطاب شكر لمن أخذ الدرجة الكاملة. لا يُرسل شيء قبل «اعتماد وإرسال».</p>
+    <label>الفصل <select id="cnT"><option value="0">الأول</option><option value="1">الثاني</option></select></label>
+    <label>الفترة <select id="cnP"><option value="0">الأولى</option><option value="1">الثانية</option></select></label>
+    <button id="cnBuild" type="button">تجهيز الكشوف</button>
+    <div id="cnOut" style="overflow-x:auto;margin-top:10px"></div></details>`;
+  host.appendChild(box);
+  box.querySelector('#cnT').value = a.t; box.querySelector('#cnP').value = a.p;
+  box.querySelector('#cnBuild').onclick = () => cnBuild(box);
+  try {
+    const pending = cnCompute(a.t, a.p).filter(g => g.mode === 'new' && g.nCols);
+    if (pending.length) {
+      const n = document.createElement('p'); n.style.cssText = 'color:#7a5600;font-weight:bold';
+      n.textContent = '🔔 رُصدت مشاركات أو واجبات جديدة منذ آخر تقرير في: ' + pending.map(g => g.title + ' (' + g.section + ')').join('، ') + '. هل تريد تجهيز رسائلها؟ افتح هذا القسم واضغط «تجهيز الكشوف».';
+      box.insertBefore(n, box.firstChild.nextSibling);
+    }
+  } catch (_) {}
+}
+
+async function cnBuild(box) {
+  const db = window.__app.db, t = +box.querySelector('#cnT').value, p = +box.querySelector('#cnP').value, out = box.querySelector('#cnOut');
+  out.textContent = 'جارٍ التجهيز...';
+  const groups = cnCompute(t, p), links = await wnLoadLinks();
+  const sent = (db.courseNotices && db.courseNotices.sent) || {};
+  const receipts = await wnLoadReceipts(Object.values(sent).flatMap(v => v.ids || []));
+  cnState.items = {}; cnState.ctx = { t, p, groups };
+  out.replaceChildren();
+  if (!links) { const w = document.createElement('p'); w.style.color = '#b42318'; w.textContent = 'تعذّرت معرفة أولياء الأمور المرتبطين (سجّل الدخول من «بوابة أولياء الأمور»). يمكنك المراجعة والطباعة الآن، والإرسال بعد تسجيل الدخول.'; out.appendChild(w); }
+  let any = false;
+  for (const g of groups) {
+    const h = document.createElement('h4');
+    h.textContent = g.title + ' — ' + g.section + ' — ' + (g.mode === 'all' ? 'منذ بداية الفترة' : 'الجديد منذ آخر تقرير') + ' (' + g.nCols + ' خانة)';
+    out.appendChild(h);
+    if (!g.nCols) { const m = document.createElement('p'); m.className = 'muted'; m.textContent = g.mode === 'all' ? 'لم تُرصد مشاركات أو واجبات بعد.' : 'لا توجد خانات جديدة منذ آخر تقرير.'; out.appendChild(m); continue; }
+    const s = document.createElement('p'); s.className = 'muted'; s.textContent = 'خطط علاجية: ' + g.remedial.length + ' • خطابات شكر: ' + g.thanks.length + ' • بين ذلك: ' + g.middle; out.appendChild(s);
+    for (const [type, list] of [['remedial', g.remedial], ['thanks', g.thanks]]) {
+      if (!list.length) continue;
+      any = true;
+      const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:760px;margin-bottom:8px';
+      tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>' + (type === 'remedial' ? 'خطة علاجية' : 'خطاب شكر') + '</th><th>النتيجة</th><th>ولي الأمر والاستلام</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+      for (const it of list) {
+        const parents = links ? (links.get(it.uid) || []) : null;
+        const tr = document.createElement('tr');
+        const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb);
+        const c1 = document.createElement('td'); c1.textContent = it.name;
+        const c2 = document.createElement('td'); c2.textContent = it.got + ' / ' + it.max + ' (' + Math.round(it.pct) + '٪)';
+        const c3 = document.createElement('td'); c3.textContent = parents === null ? 'غير معروف' : parents.length ? 'مرتبط' : 'لا يوجد ولي أمر مرتبط (اطبع الخطاب للتوقيع)';
+        const c4 = document.createElement('td'), ta = document.createElement('textarea'); ta.value = type === 'remedial' ? cnRemedialText(it, t, p) : cnThanksText(it, t, p); ta.rows = type === 'remedial' ? 10 : 6; ta.style.cssText = 'width:100%;min-width:320px;font:13px Tahoma'; c4.appendChild(ta);
+        tr.append(c0, c1, c2, c3, c4); tb.tBodies[0].appendChild(tr);
+        cnState.items[type + '|' + g.sk + '|' + it.uid] = { it, type, g, cb, ta, parents };
+      }
+      out.appendChild(tb);
+    }
+  }
+  // سجل ما أُرسل سابقًا في هذه الفترة مع حالة الاستلام
+  const prev = Object.entries(sent).filter(([k]) => k.split('|')[1] === String(t) && k.split('|')[2] === String(p));
+  if (prev.length) {
+    const d = document.createElement('details'); d.innerHTML = '<summary>ما أُرسل سابقًا في هذه الفترة وحالة استلامه (' + prev.length + ')</summary>';
+    const ul = document.createElement('ul');
+    for (const [, v] of prev.sort((a, b) => (b[1].at || '').localeCompare(a[1].at || ''))) { const li = document.createElement('li'); li.style.whiteSpace = 'pre-line'; li.textContent = (v.label || '') + ' — ' + wnReceiptText(v, receipts).replace(/\n/g, ' • '); ul.appendChild(li); }
+    d.appendChild(ul); out.appendChild(d);
+  }
+  const bar = document.createElement('div'); bar.style.marginTop = '10px';
+  const send = document.createElement('button'); send.type = 'button'; send.textContent = 'اعتماد وإرسال المحدد';
+  const pr = document.createElement('button'); pr.type = 'button'; pr.textContent = 'طباعة الكشوف';
+  const st = document.createElement('p'); st.className = 'muted'; st.id = 'cnStatus';
+  send.onclick = () => cnSend(box, st); pr.onclick = () => cnPrint();
+  if (!any) send.disabled = true;
+  bar.append(send, document.createTextNode(' '), pr, st); out.appendChild(bar);
+}
+
+async function cnSend(box, st) {
+  const app = window.__app, db = app.db, ctx = cnState.ctx; if (!ctx) return;
+  const all = Object.values(cnState.items), chosen = all.filter(x => x.cb.checked && !x.cb.disabled);
+  if (!chosen.length) { st.textContent = 'لم تحدد أي طالب.'; return; }
+  if (chosen.some(x => x.parents === null)) { st.textContent = 'سجّل الدخول من «بوابة أولياء الأمور» أولًا، ثم أعد التجهيز.'; return; }
+  const rem = chosen.filter(x => x.type === 'remedial').length;
+  if (!confirm('سيُرسل ' + rem + ' خطة علاجية و' + (chosen.length - rem) + ' خطاب شكر.\nبعدها تُحسب التقارير القادمة على الخانات الجديدة فقط. متابعة؟')) return;
+  db.courseNotices = db.courseNotices || {}; db.courseNotices.sent = db.courseNotices.sent || {}; db.courseNotices.snap = db.courseNotices.snap || {};
+  let ok = 0, fail = 0; const stamp = new Date().toISOString();
+  for (const x of chosen) {
+    const body = x.ta.value.trim(); if (!body) continue;
+    const ids = []; let good = true;
+    for (const pu of x.parents) {
+      const { data, error } = await supa.from('parent_messages').insert({ student_id: x.it.uid, parent_uid: pu, sender_role: 'teacher', body }).select('id');
+      if (error) { good = false; break; }
+      for (const r of (Array.isArray(data) ? data : data ? [data] : [])) if (r && r.id !== undefined) ids.push(String(r.id));
+    }
+    if (good) { db.courseNotices.sent[[x.g.subject, ctx.t, ctx.p, x.g.section, x.it.uid, x.type, stamp].join('|')] = { at: stamp, type: x.type, ids, label: x.it.name + ' — ' + x.g.title + ' — ' + (x.type === 'remedial' ? 'خطة علاجية' : 'خطاب شكر') }; ok++; } else fail++;
+    st.textContent = 'جارٍ الإرسال... ' + (ok + fail) + ' من ' + chosen.length;
+  }
+  // بعد الإرسال: تُعلَّم الخانات الحالية كـ«سبق تقريرها» لكل مجموعة أُرسل منها شيء، فتُحسب المرة القادمة على الجديد فقط
+  for (const g of ctx.groups) if (g.nCols) db.courseNotices.snap[g.sk] = JSON.parse(JSON.stringify(g.cols));
+  app.save();
+  const msg = '✓ أُرسل ' + ok + (fail ? ' — تعذّر ' + fail : '') + '. التقرير القادم سيكون على الخانات الجديدة فقط.';
+  await cnBuild(box); const s2 = box.querySelector('#cnStatus'); if (s2) s2.textContent = msg;
+}
+
+function cnPrint() {
+  const ctx = cnState.ctx; if (!ctx) return;
+  const items = Object.values(cnState.items);
+  const html = '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>المشاركات والواجبات</title><style>body{font:14px Tahoma;margin:24px}table{border-collapse:collapse;width:100%;margin-bottom:16px}td,th{border:1px solid #999;padding:5px}.letter{page-break-inside:avoid;border:1px solid #ccc;border-radius:8px;padding:10px;margin:10px 0}pre{white-space:pre-wrap;font:14px Tahoma;margin:0}.sig{margin-top:14px;border-top:1px dashed #999;padding-top:8px}</style></head><body><h1>المشاركات والواجبات — الفصل ' + (ctx.t + 1) + ' — الفترة ' + (ctx.p + 1) + '</h1><table><tr><th>م</th><th>الطالب</th><th>المادة</th><th>النوع</th><th>النتيجة</th></tr>' +
+    items.map((x, i) => '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(x.it.name) + ' — ' + escapeHtml(x.it.section) + '</td><td>' + escapeHtml(x.it.title) + '</td><td>' + (x.type === 'remedial' ? 'خطة علاجية' : 'خطاب شكر') + '</td><td>' + x.it.got + ' / ' + x.it.max + '</td></tr>').join('') + '</table>' +
+    items.map(x => '<div class="letter"><pre>' + escapeHtml(x.ta.value) + '</pre><p class="sig">اسم ولي الأمر: ........................ التوقيع: ................ تاريخ الاطلاع: ..../..../........</p></div>').join('') +
+    '<script>window.onload=function(){window.print()}<\/script></body></html>';
+  const win = window.open('', '_blank'); if (!win) { alert('اسمح بالنوافذ المنبثقة للطباعة.'); return; }
+  win.document.write(html); win.document.close();
 }
 
 // ============================================================
@@ -1617,6 +1823,7 @@ async function renderParentTab(root) {
   root.querySelector('#paLogout').onclick=async()=>{await supa.auth.signOut();loginBox(root,'parentPortal');};
   root.querySelector('#paSyncAll').onclick=()=>syncReports(root,students);
   wnRender(root.querySelector('#wnHost'));
+  cnRender(root.querySelector('#wnHost'));
   vnRender(root.querySelector('#wnHost'));
 
   let linked=new Set();
@@ -1885,7 +2092,7 @@ async function renderTeacherMessages(root){
       const mine=m.sender_role==='teacher';
       const bubble=document.createElement('div');
       bubble.style.cssText=`margin:6px 0;padding:8px 10px;border-radius:10px;max-width:82%;${mine?'margin-right:auto;background:#dfeee8':'margin-left:auto;background:#fff;border:1px solid #d6e3dd'}`;
-      const receipt=mine?(m.acknowledged_at?' — ✓ أقرّ ولي الأمر بالاطلاع '+msgTime(m.acknowledged_at):m.read_at?' — ✓ قرأها '+msgTime(m.read_at):' — لم تُقرأ بعد'):'';
+      const receipt=mine?(m.acknowledged_at?' — ✓ أقرّ ولي الأمر'+(m.ack_name?' باسم «'+msgSafe(m.ack_name)+'»':'')+' '+msgTime(m.acknowledged_at):m.read_at?' — ✓ قرأها '+msgTime(m.read_at):' — لم تُقرأ بعد'):'';
       bubble.innerHTML=`<div style="white-space:pre-wrap;line-height:1.8">${msgSafe(m.body)}</div><div class="muted" style="font-size:11px;margin-top:4px">${mine?'المعلم':'ولي الأمر'} — ${msgTime(m.created_at)}${receipt}</div>`;
       chat.appendChild(bubble);
     }
