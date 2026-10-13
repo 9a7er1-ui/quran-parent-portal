@@ -315,6 +315,16 @@ function renderMissingExpanded(rep){
   return `<div class="card"><h3>كل ما ينقصه حتى الآن</h3>${miss.notes.length?`<ul class="clean">${miss.notes.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:''}${miss.rows.length?`<div class="tbl"><table><tr><th>المادة</th><th>الفترة</th><th>البند</th><th>الباقي</th></tr>${miss.rows.map(r=>`<tr><td>${escapeHtml(r.subject)}</td><td>${escapeHtml(r.period)}</td><td>${escapeHtml(r.item)}</td><td>${of(r.remaining,r.count)}</td></tr>`).join('')}</table></div>`:''}</div>`;
 }
 
+const LIFE_SECTION_RE=/(أول\s*متوسط\s*[٦6]$|^1\/6$|^١\/٦$)/;
+function cleanReport(rep,sectionName){
+  const sec=String(sectionName||rep.section||'').trim();
+  if(LIFE_SECTION_RE.test(sec))return rep;
+  const r={...rep,life:null};
+  r.missing=(rep.missing||[]).filter(x=>!String(x).startsWith('المهارات الحياتية'));
+  r.needs=(rep.needs||[]).filter(x=>!String(x).includes('المهارات الحياتية'));
+  r.strengths=(rep.strengths||[]).filter(x=>!String(x).includes('المهارات الحياتية'));
+  return r;
+}
 function renderReportBody(rep){
   let h=renderLevels(rep)+renderTeacherCards(rep)+renderFollowupSummary(rep);
   if(reportMode==='expanded'){
@@ -325,7 +335,7 @@ function renderReportBody(rep){
 
 // ---------- صفحة ولي الأمر ----------
 function renderStudentCard(row){
-  const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,updated=rep.generatedAt?new Date(rep.generatedAt).toLocaleString('ar-SA'):'لم تُحدَّث بعد';
+  const all=row.report||{},rep=cleanReport((all.semesters||[])[reportSemester]||all,((all.semesters||[])[reportSemester]||all).section||all.section),updated=rep.generatedAt?new Date(rep.generatedAt).toLocaleString('ar-SA'):'لم تُحدَّث بعد';
   const name=row.full_name||all.name||rep.name||'الطالب';
   if(all.support?.portalEnabled===false||rep.support?.portalEnabled===false)return `<section><h2>${escapeHtml(name)}</h2><div class="card warn">بوابة المتابعة موقوفة مؤقتًا.</div></section>`;
   const last=lsGet('parent-last-report-'+row.id,null),isNew=!last||new Date(rep.generatedAt)>new Date(last||0);
@@ -420,7 +430,7 @@ async function wireParentChats(){
 function teacherFollowupEditor(row,rep){const s=rep.support||{};return `<section class="teacher-followup" id="teacherFollowup"><h3>إدارة متابعة الطالب — للمعلم</h3><p class="muted">هذه اللوحة لا تظهر لولي الأمر بصورتها التحريرية. ما يظهر له هو المحتوى الذي تحفظه بحسب نوعه.</p><label>المستوى<select id="fuLevel"><option value="normal"${s.level==='normal'?' selected':''}>عادي</option><option value="distinguished"${s.level==='distinguished'?' selected':''}>متميز</option><option value="remedial"${s.level==='remedial'?' selected':''}>يحتاج خطة تحسين ومتابعة</option></select></label><label>ملاحظة المعلم لولي الأمر<textarea id="fuTeacherNote" rows="3">${escapeHtml(s.teacherNote||'')}</textarea></label><label>ملاحظة داخلية للمعلم فقط<textarea id="fuPrivateNote" rows="3">${escapeHtml(s.privateNote||'')}</textarea></label><label>هدف الطالب الحالي<textarea id="fuGoal" rows="2">${escapeHtml(s.goal||'')}</textarea></label><label>إشادة للطالب وولي الأمر<textarea id="fuPraise" rows="2">${escapeHtml(s.praise||'')}</textarea></label><label>خطة الإثراء<textarea id="fuEnrichment" rows="4">${escapeHtml(s.enrichmentPlan||'')}</textarea></label><label>مهام خطة الإثراء — مهمة في كل سطر<textarea id="fuEnrichmentTasks" rows="4">${escapeHtml(s.enrichmentTasks||'')}</textarea></label><div id="fuRemedialWrap"><label>خطة التحسين والمتابعة<textarea id="fuRemedial" rows="4">${escapeHtml(s.remedialPlan||'')}</textarea></label><label>مهام خطة التحسين — مهمة في كل سطر<textarea id="fuRemedialTasks" rows="4">${escapeHtml(s.remedialTasks||'')}</textarea></label></div><label class="checkline"><input id="fuContact" type="checkbox"${s.contactNeeded?' checked':''}> يحتاج إلى تواصل مع ولي الأمر</label><div><button type="button" id="saveFollowup">حفظ المتابعة</button> <span id="followupSaved" class="save-ok"></span></div></section>`}
 function wireTeacherFollowup(row){const level=document.getElementById('fuLevel'),wrap=document.getElementById('fuRemedialWrap');if(!level)return;const show=()=>wrap.style.display=level.value==='remedial'?'':'none';level.onchange=show;show();document.getElementById('saveFollowup').onclick=()=>{const val=id=>document.getElementById(id)?.value||'',support={level:level.value,teacherNote:val('fuTeacherNote'),privateNote:val('fuPrivateNote'),goal:val('fuGoal'),praise:val('fuPraise'),enrichmentPlan:val('fuEnrichment'),enrichmentTasks:val('fuEnrichmentTasks'),remedialPlan:val('fuRemedial'),remedialTasks:val('fuRemedialTasks'),contactNeeded:!!document.getElementById('fuContact')?.checked};if(window.opener)window.opener.postMessage({type:'quran-update-support',studentUid:row.id,support},'*');const all=row.report||{};all.support={...(all.support||{}),...support};for(const sm of all.semesters||[])if(sm)sm.support={...(sm.support||{}),...support};sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));document.getElementById('followupSaved').textContent='تم الحفظ';setTimeout(()=>{const x=document.getElementById('followupSaved');if(x)x.textContent=''},1800)}}
 function renderTeacherPreviewRow(row){
-  const all=row.report||{},rep=(all.semesters||[])[reportSemester]||all,history=(row.teacherHistory||[]).map(x=>`<div class="card"><div>${escapeHtml(x.text||'')}</div><div class="muted">${new Date(x.at).toLocaleString('ar-SA')}</div></div>`).join('');
+  const all=row.report||{},rep=cleanReport((all.semesters||[])[reportSemester]||all,((all.semesters||[])[reportSemester]||all).section||all.section),history=(row.teacherHistory||[]).map(x=>`<div class="card"><div>${escapeHtml(x.text||'')}</div><div class="muted">${new Date(x.at).toLocaleString('ar-SA')}</div></div>`).join('');
   reportsBox.innerHTML=`<section><h2>${escapeHtml(row.full_name||all.name||rep.name||'الطالب')} <button type="button" id="renameStudentBtn" class="secondary">تعديل الاسم</button></h2><p class="muted">الشعبة: ${escapeHtml(rep.section||all.section||'—')} — هذه معاينة لما يراه ولي الأمر.</p></section><section>${renderControls()}${renderReportBody(rep)}</section>${teacherFollowupEditor(row,rep)}<section><details><summary>ملاحظات المعلم الداخلية وسجل التغييرات</summary>${rep.support?.privateNote?'<p>'+escapeHtml(rep.support.privateNote)+'</p>':''}${history||'<p class="muted">لا توجد أحداث.</p>'}</details><button type="button" class="no-print" onclick="window.print()">طباعة التقرير</button></section>`;
   wireReportControls(()=>renderTeacherPreviewRow(row));
   const rb=document.getElementById('renameStudentBtn');if(rb)rb.onclick=()=>{const current=row.full_name||all.name||rep.name||'',nm=prompt('اسم الطالب:',current);if(nm&&nm.trim()){row.full_name=nm.trim();if(all.name!==undefined)all.name=nm.trim();for(const sm of all.semesters||[])if(sm)sm.name=nm.trim();sessionStorage.setItem('quran-student-page-preview',JSON.stringify(row));if(window.opener)window.opener.postMessage({type:'quran-rename-student',studentUid:row.id,name:nm.trim()},'*');renderTeacherPreviewRow(row)}};
@@ -449,6 +459,10 @@ function renderParentView(){
   if(cs)cs.onchange=()=>{lsSet(SELECTED_KEY,cs.value);__parentNotice='';renderParentView()};
   wireReportControls(renderParentView);
   wireParentChats();
+  const add=document.createElement('section');add.className='no-print';
+  add.innerHTML=`<details><summary>لديك ابن آخر عند المعلم نفسه؟</summary><p class="muted">اطلب من المعلم رمز ربط خاصًا بابنك الآخر، ثم امسح الباركود بكاميرا الجوال وأنت مسجّل الدخول، أو اكتب الرمز هنا. بعدها تختار الابن من القائمة أعلى الصفحة.</p><form id="addChildForm"><input id="addChildCode" maxlength="12" placeholder="رمز الربط (8 خانات)" autocomplete="off" style="text-transform:uppercase;letter-spacing:2px;text-align:center"><button type="submit">ربط الابن الآخر بحسابي</button></form><p id="addChildMsg" class="muted"></p></details>`;
+  reportsBox.appendChild(add);
+  add.querySelector('#addChildForm').onsubmit=async ev=>{ev.preventDefault();const code=add.querySelector('#addChildCode').value.trim().toUpperCase(),msg=add.querySelector('#addChildMsg');if(code.length<6){msg.textContent='اكتب الرمز كاملًا.';return}msg.textContent='جارٍ الربط...';const before=new Set(__parentRows.map(r=>r.id));const {error}=await supa.rpc('redeem_link_code',{p_code:code});if(error){msg.textContent='تعذّر الربط: الرمز غير صالح أو منتهي أو مستخدم من قبل. اطلب رمزًا جديدًا من المعلم.';return}const {data}=await supa.from('students_public').select('*');__parentRows=data||__parentRows;const fresh=__parentRows.find(r=>!before.has(r.id));if(fresh)lsSet(SELECTED_KEY,fresh.id);saveKnown(__parentRows.map(r=>r.id));__parentNotice=fresh?'✓ تم ربط '+escapeHtml(fresh.full_name||'الابن')+' بحسابك. يمكنك التنقل بين أبنائك من القائمة أعلى الصفحة.':'';renderParentView();window.scrollTo(0,0)};
   const wrap=document.createElement('section');wrap.className='no-print';wrap.appendChild(logoutButton());reportsBox.appendChild(wrap);
 }
 
@@ -479,35 +493,91 @@ function friendlyAuthError(m){
   if(m==='Invalid login credentials')return 'البريد أو كلمة المرور غير صحيحة.';
   if(/already registered/i.test(m))return 'هذا البريد مسجّل من قبل، اختر «لديّ حساب».';
   if(/Password should be/i.test(m))return 'كلمة المرور قصيرة، اكتب 6 خانات على الأقل.';
+  if(/Email not confirmed/i.test(m))return 'لم يُؤكَّد البريد بعد. افتح رسالة التأكيد في بريدك ثم سجّل الدخول.';
+  if(/rate limit|too many|security purposes/i.test(m))return 'طلبات كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.';
+  if(/invalid.*email|Unable to validate email/i.test(m))return 'اكتب البريد الإلكتروني بشكل صحيح.';
+  if(/should be different/i.test(m))return 'اختر كلمة مرور مختلفة عن القديمة.';
   return m;
 }
+function passField(id,auto,ph){return `<div style="position:relative"><input id="${id}" name="password" type="password" placeholder="${ph}" autocomplete="${auto}" style="padding-left:70px"><button type="button" class="secondary pass-eye" data-for="${id}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:auto;min-height:auto;padding:4px 10px;margin:0;font-size:.85rem">إظهار</button></div>`}
+function wireEyes(root){root.querySelectorAll('.pass-eye').forEach(b=>b.onclick=()=>{const i=document.getElementById(b.dataset.for);const show=i.type==='password';i.type=show?'text':'password';b.textContent=show?'إخفاء':'إظهار'})}
+
 function renderAuthForm(mode){
   const hasCode=!!pendingCode();
+  if(mode==='forgot'){
+    authBox.innerHTML=`<h3>استعادة كلمة المرور</h3><p class="muted">اكتب بريدك المسجّل، وسنرسل إليه رابطًا لتعيين كلمة مرور جديدة. (لأمان حسابك لا تُرسل كلمة المرور نفسها بالبريد.)</p>
+      <form id="forgotForm" autocomplete="on"><input id="paEmail" name="email" type="email" placeholder="البريد الإلكتروني" autocomplete="username email" required><button type="submit">إرسال رابط الاستعادة</button></form>
+      <p id="paMsg" class="error"></p><button type="button" class="secondary" id="backLogin">رجوع لتسجيل الدخول</button>`;
+    document.getElementById('backLogin').onclick=()=>renderAuthForm('login');
+    document.getElementById('forgotForm').onsubmit=async ev=>{
+      ev.preventDefault();const email=document.getElementById('paEmail').value.trim(),msg=document.getElementById('paMsg');
+      if(!email){msg.textContent='اكتب البريد أولًا.';return}
+      msg.classList.remove('error');msg.textContent='جارٍ الإرسال...';
+      const {error}=await supa.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+      if(error){msg.classList.add('error');msg.textContent=friendlyAuthError(error.message);return}
+      msg.textContent='إن كان البريد مسجّلًا فسيصلك خلال دقائق رابط لتعيين كلمة مرور جديدة. افتحه من هذا الجهاز نفسه. وإن لم تجده فابحث في البريد غير المرغوب فيه (Junk/Spam).';
+    };
+    return;
+  }
   authBox.innerHTML=`<div class="tabs"><button id="tabLogin" class="${mode==='login'?'active':'secondary'}" type="button">لديّ حساب</button><button id="tabSignup" class="${mode==='signup'?'active':'secondary'}" type="button">حساب جديد</button></div>
     ${hasCode?'<p class="muted">تم حفظ رمز الطالب، وسيُربط بحسابك تلقائيًا بعد تسجيل الدخول أو إنشاء الحساب.</p>':''}
-    <input id="paEmail" type="email" placeholder="البريد الإلكتروني" autocomplete="email">
-    <input id="paPass" type="password" placeholder="كلمة المرور" autocomplete="${mode==='login'?'current-password':'new-password'}">
-    <button id="paSubmit" type="button">${mode==='login'?'تسجيل الدخول':'إنشاء الحساب'}</button>
+    <form id="authForm" autocomplete="on" method="post" action="#">
+      <input id="paEmail" name="email" type="email" placeholder="البريد الإلكتروني" autocomplete="username email" required>
+      ${passField('paPass',mode==='login'?'current-password':'new-password','كلمة المرور')}
+      ${mode==='signup'?passField('paPass2','new-password','أعد كتابة كلمة المرور'):''}
+      <button id="paSubmit" type="submit">${mode==='login'?'تسجيل الدخول':'إنشاء الحساب'}</button>
+    </form>
+    <p class="muted">💡 عند تسجيل الدخول سيعرض عليك جوالك «حفظ كلمة المرور»؛ اختر «حفظ» لتدخل بعد ذلك بلمسة.</p>
+    ${mode==='login'?'<button type="button" class="secondary" id="forgotBtn">نسيت كلمة المرور؟</button>':''}
     <p id="paMsg" class="error"></p>`;
+  wireEyes(authBox);
   document.getElementById('tabLogin').onclick=()=>renderAuthForm('login');
   document.getElementById('tabSignup').onclick=()=>renderAuthForm('signup');
-  document.getElementById('paSubmit').onclick=async()=>{
+  const fb=document.getElementById('forgotBtn');if(fb)fb.onclick=()=>renderAuthForm('forgot');
+  document.getElementById('authForm').onsubmit=async ev=>{
+    ev.preventDefault();
     const email=document.getElementById('paEmail').value.trim(),password=document.getElementById('paPass').value,msg=document.getElementById('paMsg');
     if(!email||!password){msg.textContent='أدخل البريد وكلمة المرور.';return}
+    if(mode==='signup'&&password!==document.getElementById('paPass2').value){msg.textContent='كلمتا المرور غير متطابقتين.';return}
     msg.textContent='جارٍ المعالجة...';msg.classList.remove('error');
     if(mode==='login'){const {error}=await supa.auth.signInWithPassword({email,password});if(error){msg.textContent=friendlyAuthError(error.message);msg.classList.add('error');return}showReports();return}
     const {data,error}=await supa.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});
     if(error){msg.textContent=friendlyAuthError(error.message);msg.classList.add('error');return}
+    if(data&&data.user&&Array.isArray(data.user.identities)&&data.user.identities.length===0){msg.classList.add('error');msg.textContent='هذا البريد مسجّل من قبل. اختر «لديّ حساب»، أو «نسيت كلمة المرور».';return}
     if(data&&data.session){showReports();return}
-    msg.textContent='أرسلنا رسالة تأكيد إلى بريدك. افتحها من هذا الجهاز نفسه، وسيُربط ابنك تلقائيًا بعد الدخول.';
+    msg.textContent='أرسلنا رسالة تأكيد إلى بريدك. افتحها من هذا الجهاز نفسه، وسيُربط ابنك تلقائيًا بعد الدخول. وإن لم تجدها خلال دقائق فابحث في البريد غير المرغوب فيه (Junk/Spam).';
   };
 }
 
+function renderResetForm(){
+  if(location.hash)history.replaceState(null,'',location.pathname+location.search);
+  authBox.style.display='block';reportsBox.style.display='none';
+  authBox.innerHTML=`<h3>تعيين كلمة مرور جديدة</h3><form id="resetForm" autocomplete="on"><input type="email" name="email" autocomplete="username" style="display:none" value="">${passField('newPass','new-password','كلمة المرور الجديدة')}${passField('newPass2','new-password','أعد كتابتها')}<button type="submit">حفظ كلمة المرور الجديدة</button></form><p id="paMsg" class="error"></p>`;
+  wireEyes(authBox);
+  supa.auth.getUser().then(({data})=>{const e=authBox.querySelector('input[name=email]');if(e&&data?.user?.email)e.value=data.user.email});
+  document.getElementById('resetForm').onsubmit=async ev=>{
+    ev.preventDefault();const a=document.getElementById('newPass').value,b=document.getElementById('newPass2').value,msg=document.getElementById('paMsg');
+    if(a.length<6){msg.textContent='اكتب 6 خانات على الأقل.';return}
+    if(a!==b){msg.textContent='كلمتا المرور غير متطابقتين.';return}
+    msg.classList.remove('error');msg.textContent='جارٍ الحفظ...';
+    const {error}=await supa.auth.updateUser({password:a});
+    if(error){msg.classList.add('error');msg.textContent=friendlyAuthError(error.message);return}
+    history.replaceState(null,'',location.pathname+location.search);
+    msg.textContent='✓ تم تعيين كلمة المرور الجديدة.';setTimeout(showReports,900);
+  };
+}
+
+const IS_RECOVERY=/type=recovery/.test(location.hash)||/type=recovery/.test(location.search);
+const AUTH_ERR=(()=>{const h=new URLSearchParams(location.hash.slice(1));return h.get('error_description')||''})();
 const teacherPreview=new URLSearchParams(location.search).get('preview')==='1'&&renderTeacherPreview();
 if(!teacherPreview)(async()=>{
-  try{supa=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY)}catch(err){authBox.innerHTML='<p class="error">تعذّر الاتصال: '+escapeHtml(err.message)+'</p>';return}
+  try{supa=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{flowType:'implicit',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}catch(err){authBox.innerHTML='<p class="error">تعذّر الاتصال: '+escapeHtml(err.message)+'</p>';return}
+  let recovering=IS_RECOVERY;
+  supa.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY'){recovering=true;renderResetForm()}});
   const {data}=await supa.auth.getSession();
-  if(data.session)showReports();else renderAuthForm(pendingCode()?'signup':'login');
+  if(recovering&&data.session){renderResetForm();return}
+  if(AUTH_ERR){renderAuthForm('login');const m=document.getElementById('paMsg');if(m)m.textContent=/expired|invalid/i.test(AUTH_ERR)?'انتهت صلاحية الرابط أو استُخدم من قبل. اطلب رابطًا جديدًا من «نسيت كلمة المرور».':AUTH_ERR;history.replaceState(null,'',location.pathname+location.search);return}
+  if(data.session){if(location.hash.includes('access_token'))history.replaceState(null,'',location.pathname+location.search);showReports()}else renderAuthForm(pendingCode()?'signup':'login');
 })();
 </script>
 </body>
