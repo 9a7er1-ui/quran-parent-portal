@@ -192,7 +192,7 @@ const FS_FIELD_LABELS = {
   holidays: 'الإجازات', approvals: 'الاعتمادات', actual: 'الموعد الفعلي', view: 'الكشف المعروض', max: 'الدرجة العظمى',
   sections: 'الشعب', activeSection: 'الشعبة النشطة', activeSubject: 'المادة النشطة', coursework: 'درجات المواد',
   quranShare: 'نصيب القرآن', auditLog: 'سجل التعديلات', archives: 'الأرشيف', lastBackupAt: 'آخر نسخة احتياطية',
-  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية', violationNotices: 'سجل إشعارات المخالفات', courseNotices: 'سجل رسائل المشاركات والواجبات'
+  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية', violationNotices: 'سجل إشعارات المخالفات', courseNotices: 'سجل رسائل المشاركات والواجبات', quranPlan: 'توزيع مقرر القرآن'
 };
 function fsSize(v) { const t = fsType(v); return t === 'array' ? v.length : t === 'object' ? Object.keys(v).length : t === 'undefined' ? '—' : 'قيمة'; }
 
@@ -1102,7 +1102,70 @@ const WN_HIFZ_DAYS = [0, 1, 2, 3]; // أيام الحفظ: الأحد إلى ا�
 const WN_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 const WN_WEEKS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع'];
 const WN_DAY_MAX = 7;
+const WN_WEAK_MAX = 3; // درجة 3 فأقل أو غياب = مقطع يحتاج تعويضًا
+const WN_MAKEUP_MIN = 4; // التعويض المقبول: درجة 4 فأكثر
 const wnState = { items: {}, links: null };
+
+
+// ---------- توزيع مقرر القرآن (المقطع المقرر لكل يوم) ----------
+// مقترح من استمارتي الفصل الأول: الفترة الأولى تبدأ بالأسبوع الثاني في التطبيق (17/3)، والفترة الثانية بالأسبوع الأول (30/4).
+const QP_SEED = {"0|0|1|0": {"date": "17/3", "surah": "الإسراء", "from": 1, "to": 6}, "0|0|1|1": {"date": "18/3", "surah": "الإسراء", "from": 7, "to": 12}, "0|0|1|2": {"date": "19/3", "surah": "الإسراء", "from": 13, "to": 17}, "0|0|1|3": {"date": "20/3", "surah": "الإسراء", "from": 18, "to": 24}, "0|0|1|4": {"date": "21/3", "surah": "يوسف", "from": 1, "to": 29}, "0|0|2|0": {"date": "24/3", "surah": "الإسراء", "from": 25, "to": 32}, "0|0|2|1": {"date": "25/3", "surah": "الإسراء", "from": 33, "to": 44}, "0|0|2|2": {"date": "26/3", "surah": "الإسراء", "from": 45, "to": 53}, "0|0|2|3": {"date": "27/3", "surah": "الإسراء", "from": 54, "to": 60}, "0|0|2|4": {"date": "28/3", "surah": "يوسف", "from": 30, "to": 53}, "0|0|3|0": {"date": "2/4", "surah": "الإسراء", "from": 61, "to": 69}, "0|0|3|1": {"date": "3/4", "surah": "الإسراء", "from": 70, "to": 79}, "0|0|3|2": {"date": "4/4", "surah": "الإسراء", "from": 80, "to": 89}, "0|0|3|3": {"date": "5/4", "surah": "الإسراء", "from": 90, "to": 98}, "0|0|3|4": {"date": "6/4", "surah": "يوسف", "from": 54, "to": 81}, "0|0|4|0": {"date": "9/4", "surah": "الإسراء", "from": 99, "to": 104}, "0|0|4|1": {"date": "10/4", "surah": "الإسراء", "from": 105, "to": 111}, "0|0|4|2": {"date": "11/4", "surah": "النحل", "from": 1, "to": 9}, "0|0|4|3": {"date": "12/4", "note": "إجازة اليوم الوطني"}, "0|0|4|4": {"date": "13/4", "note": ""}, "0|0|5|0": {"date": "16/4", "surah": "النحل", "from": 10, "to": 14}, "0|0|5|1": {"date": "17/4", "surah": "النحل", "from": 15, "to": 23}, "0|0|5|2": {"date": "18/4", "surah": "النحل", "from": 24, "to": 29}, "0|0|5|3": {"date": "19/4", "surah": "النحل", "from": 30, "to": 34}, "0|0|5|4": {"date": "20/4", "surah": "يوسف", "from": 82, "to": 111}, "0|0|6|0": {"date": "23/4", "surah": "النحل", "from": 35, "to": 37}, "0|0|6|1": {"date": "24/4", "surah": "النحل", "from": 38, "to": 44}, "0|0|6|2": {"date": "25/4", "surah": "النحل", "from": 45, "to": 55}, "0|0|6|3": {"date": "26/4", "surah": "النحل", "from": 56, "to": 62}, "0|0|6|4": {"date": "27/4", "surah": "هود", "from": 1, "to": 24}, "0|1|0|0": {"date": "30/4", "surah": "النحل", "from": 63, "to": 67}, "0|1|0|1": {"date": "1/5", "surah": "النحل", "from": 68, "to": 74}, "0|1|0|2": {"date": "2/5", "surah": "النحل", "from": 75, "to": 79}, "0|1|0|3": {"date": "3/5", "surah": "النحل", "from": 80, "to": 87}, "0|1|0|4": {"date": "4/5", "surah": "هود", "from": 25, "to": 49}, "0|1|1|0": {"date": "7/5", "surah": "النحل", "from": 88, "to": 93}, "0|1|1|1": {"date": "8/5", "surah": "النحل", "from": 94, "to": 102}, "0|1|1|2": {"date": "9/5", "surah": "النحل", "from": 103, "to": 110}, "0|1|1|3": {"date": "10/5", "surah": "النحل", "from": 111, "to": 118}, "0|1|1|4": {"date": "11/5", "surah": "هود", "from": 50, "to": 96}, "0|1|2|0": {"date": "14/5", "surah": "النحل", "from": 119, "to": 128}, "0|1|2|1": {"date": "15/5", "surah": "الحجر", "from": 1, "to": 13}, "0|1|2|2": {"date": "16/5", "surah": "الحجر", "from": 14, "to": 25}, "0|1|2|3": {"date": "17/5", "surah": "الحجر", "from": 26, "to": 44}, "0|1|2|4": {"date": "18/5", "surah": "هود", "from": 97, "to": 123}, "0|1|3|0": {"date": "21/5", "surah": "الحجر", "from": 45, "to": 60}, "0|1|3|1": {"date": "22/5", "surah": "الحجر", "from": 61, "to": 84}, "0|1|3|2": {"date": "23/5", "surah": "الحجر", "from": 85, "to": 99}, "0|1|3|3": {"date": "24/5", "surah": "إبراهيم", "from": 1, "to": 5}, "0|1|3|4": {"date": "25/5", "surah": "يونس", "from": 1, "to": 20}, "0|1|4|0": {"date": "28/5", "surah": "إبراهيم", "from": 6, "to": 9}, "0|1|4|1": {"date": "29/5", "surah": "إبراهيم", "from": 10, "to": 12}, "0|1|4|2": {"date": "30/5", "surah": "إبراهيم", "from": 13, "to": 18}, "0|1|4|3": {"date": "1/6", "surah": "إبراهيم", "from": 19, "to": 22}, "0|1|4|4": {"date": "2/6", "surah": "يونس", "from": 21, "to": 47}, "0|1|5|0": {"date": "5/6", "surah": "إبراهيم", "from": 23, "to": 31}, "0|1|5|1": {"date": "6/6", "surah": "إبراهيم", "from": 32, "to": 37}, "0|1|5|2": {"date": "7/6", "surah": "إبراهيم", "from": 38, "to": 44}, "0|1|5|3": {"date": "8/6", "surah": "إبراهيم", "from": 45, "to": 52}, "0|1|5|4": {"date": "9/6", "surah": "يونس", "from": 48, "to": 70}};
+function qpEntry(t, p, w, d) { const db = window.__app.db, days = db.quranPlan && db.quranPlan.days; return days ? days[[t, p, w, d].join('|')] || null : null; }
+function qpText(e) { return e && e.surah ? 'سورة ' + e.surah + ' من آية ' + e.from + ' إلى آية ' + e.to : ''; }
+
+function qpRender(host) {
+  const app = window.__app; if (!app || !host) return;
+  const box = document.createElement('div'); box.className = 'summary-card';
+  box.innerHTML = `<details id="qpDetails"><summary><b>توزيع مقرر القرآن (لتحديد الآيات في الخطط ورسائل التعويض)</b></summary>
+    <p class="muted">المقطع المقرر لكل يوم. راجع ربط الأسابيع والتواريخ، وعدّل ما يلزم، ثم اضغط «اعتماد التوزيع» لهذه الفترة.</p>
+    <label>الفصل <select id="qpT"><option value="0">الأول</option><option value="1">الثاني</option></select></label>
+    <label>الفترة <select id="qpP"><option value="0">الأولى</option><option value="1">الثانية</option></select></label>
+    <div id="qpOut" style="overflow-x:auto;margin-top:8px"></div></details>`;
+  host.appendChild(box);
+  const a = app.db.actual; box.querySelector('#qpT').value = a.t; box.querySelector('#qpP').value = a.p;
+  const draw = () => qpDraw(box);
+  box.querySelector('#qpT').onchange = draw; box.querySelector('#qpP').onchange = draw;
+  box.querySelector('#qpDetails').addEventListener('toggle', e => { if (e.target.open) draw(); });
+}
+function qpDraw(box) {
+  const db = window.__app.db, t = +box.querySelector('#qpT').value, p = +box.querySelector('#qpP').value, out = box.querySelector('#qpOut');
+  const saved = db.quranPlan && db.quranPlan.days || {};
+  const hasSaved = Object.keys(saved).some(k => k.startsWith(t + '|' + p + '|'));
+  const src = hasSaved ? saved : QP_SEED;
+  out.replaceChildren();
+  const note = document.createElement('p');
+  note.style.cssText = hasSaved ? 'color:#1f6b3f' : 'color:#7a5600;font-weight:bold';
+  note.textContent = hasSaved ? '✓ توزيع هذه الفترة معتمد. يمكنك تعديله ثم الاعتماد من جديد.' : (Object.keys(QP_SEED).some(k => k.startsWith(t + '|' + p + '|')) ? 'هذا مقترح من الاستمارة ولم يُعتمد بعد. راجع أن كل أسبوع في مكانه الصحيح ثم اضغط «اعتماد التوزيع».' : 'لا يوجد توزيع لهذه الفترة بعد. اكتبه ثم اضغط «اعتماد التوزيع».');
+  out.appendChild(note);
+  const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:620px';
+  tb.innerHTML = '<thead><tr><th>الأسبوع</th><th>اليوم</th><th>التاريخ</th><th>السورة</th><th>من آية</th><th>إلى آية</th><th>النوع</th></tr></thead><tbody></tbody>';
+  const inputs = [];
+  for (let w = 0; w < 7; w++) for (let d = 0; d < 5; d++) {
+    const k = [t, p, w, d].join('|'), e = src[k] || {}, tr = document.createElement('tr');
+    if (d === 0) tr.style.borderTop = '3px solid #9fb8ad';
+    const mk = (val, width, type) => { const i = document.createElement('input'); i.value = val ?? ''; i.style.cssText = 'width:' + width + ';padding:4px'; if (type) { i.type = type; i.min = 1; } return i; };
+    const date = mk(e.date || '', '70px'), sur = mk(e.surah || e.note || '', '110px'), fr = mk(e.from, '64px', 'number'), to = mk(e.to, '64px', 'number');
+    const c = x => { const td = document.createElement('td'); if (typeof x === 'string') td.textContent = x; else td.appendChild(x); return td; };
+    tr.append(c(d === 0 ? WN_WEEKS[w] : ''), c(WN_DAYS[d]), c(date), c(sur), c(fr), c(to), c(d === 4 ? 'تلاوة' : 'حفظ'));
+    tb.tBodies[0].appendChild(tr);
+    inputs.push({ k, date, sur, fr, to });
+  }
+  out.appendChild(tb);
+  const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = 'اعتماد التوزيع لهذه الفترة';
+  const st = document.createElement('span'); st.className = 'muted';
+  btn.onclick = () => {
+    const app = window.__app, db2 = app.db; db2.quranPlan = db2.quranPlan || { days: {} }; db2.quranPlan.days = db2.quranPlan.days || {};
+    for (const x of inputs) {
+      const sur = x.sur.value.trim(), fr = parseInt(x.fr.value, 10), to = parseInt(x.to.value, 10), date = x.date.value.trim();
+      if (sur && fr > 0 && to >= fr) db2.quranPlan.days[x.k] = { date, surah: sur, from: fr, to };
+      else if (date || sur) db2.quranPlan.days[x.k] = { date, note: sur };
+      else delete db2.quranPlan.days[x.k];
+    }
+    db2.quranPlan.updatedAt = new Date().toISOString();
+    app.save(); st.textContent = ' ✓ اعتُمد التوزيع.'; qpDraw(box);
+  };
+  out.append(btn, st);
+}
 
 function wnWeekLabel(t, p, w) { return 'الفصل ' + (t + 1) + ' — الفترة ' + (p + 1) + ' — الأسبوع ' + WN_WEEKS[w]; }
 function wnTag(t, p, w) { return [t, p, w].join('|'); }
@@ -1114,15 +1177,15 @@ function wnCompute(t, p, w) {
   if (!out.reqDays.length) return out;
   const qs = db.students.filter(s => (s.subject || 'quran') === 'quran' && (s.status || 'active') === 'active');
   for (const s of qs) {
-    let sum = 0, abs = 0, graded = 0; const cells = [], missing = [];
+    let sum = 0, abs = 0, graded = 0; const cells = [], missing = [], days = [];
     for (const d of out.reqDays) {
-      const k = [t, p, w, d, s.id].join('|');
-      if (db.absences[k]) { abs++; cells.push(WN_DAYS[d] + ': غياب'); }
-      else if (db.grades[k]) { const v = Number(db.grades[k].value) || 0; sum += v; graded++; cells.push(WN_DAYS[d] + ': ' + v); }
-      else { missing.push(WN_DAYS[d]); cells.push(WN_DAYS[d] + ': لم يُرصد'); }
+      const k = [t, p, w, d, s.id].join('|'), passage = qpText(qpEntry(t, p, w, d));
+      if (db.absences[k]) { abs++; cells.push(WN_DAYS[d] + ': غياب'); days.push({ d, k, v: null, abs: true, passage }); }
+      else if (db.grades[k]) { const v = Number(db.grades[k].value) || 0; sum += v; graded++; cells.push(WN_DAYS[d] + ': ' + v); days.push({ d, k, v, abs: false, passage }); }
+      else { missing.push(WN_DAYS[d]); cells.push(WN_DAYS[d] + ': لم يُرصد'); days.push({ d, k, v: null, abs: false, missing: true, passage }); }
     }
     const max = WN_DAY_MAX * out.reqDays.length, pct = sum / max * 100;
-    const item = { uid: s.studentUid, name: app.cleanName(s.name), section: s.section || db.sections[0], sum, max, pct, abs, graded, cells, missing };
+    const item = { uid: s.studentUid, name: app.cleanName(s.name), section: s.section || db.sections[0], sum, max, pct, abs, graded, cells, missing, days };
     if (missing.length) out.incomplete.push(item);
     else if (pct < WN_THRESHOLD) out.remedial.push(item);
     else if (abs === 0 && sum === max) out.thanks.push(item);
@@ -1139,17 +1202,22 @@ function wnRemedialText(it, label) {
   if (it.abs) needs.push('• الالتزام بالحضور: غاب ' + it.abs + (it.abs === 1 ? ' يومًا' : ' أيام') + ' من أيام الحفظ هذا الأسبوع، وكل غياب يُفقده درجة الحفظ لذلك اليوم.');
   if (it.graded && avg < 3.5) needs.push('• تقوية الحفظ قبل الحصة: متوسط درجته في أيام الحفظ ' + avg.toFixed(1) + ' من ' + WN_DAY_MAX + '.');
   else if (it.graded) needs.push('• المحافظة على مستوى التسميع في الأيام التي حضرها، مع تعويض ما فاته.');
-  const plan = [
+  const weak = (it.days || []).filter(x => x.abs || (x.v !== null && x.v <= WN_WEAK_MAX));
+  const plan = [];
+  if (weak.some(x => x.passage)) plan.push('إعادة حفظ هذه المقاطع وتسميعها للمعلم لتعويضها: ' + weak.filter(x => x.passage).map(x => x.passage).join('، ') + '.');
+  plan.push(
     'تسميع المقطع المقرر لابنكم في البيت يوميًا قبل يوم الحصة (10 إلى 15 دقيقة).',
     'الاستماع إلى المقطع بصوت قارئ متقن مرتين يوميًا لتثبيت الحفظ وصحة النطق.',
     'مراجعة ما حُفظ هذا الأسبوع حتى لا يُنسى.'
-  ];
+  );
   if (it.abs) plan.push('الحرص على حضوره جميع الحصص، وإبلاغ المعلم بأي عذر.');
   return ['الخطة العلاجية الأسبوعية — القرآن الكريم',
     'الطالب: ' + it.name + ' — ' + it.section,
     label,
     'نتيجة أيام الحفظ (الأحد إلى الأربعاء): ' + it.sum + ' من ' + it.max + ' (' + Math.round(it.pct) + '٪)، وهي دون الحد المطلوب ' + WN_THRESHOLD + '٪.',
-    'تفاصيل أيام الحفظ: ' + it.cells.join('، ') + '.',
+    ...((it.days || []).some(x => x.passage)
+      ? ['', 'المقاطع المقررة هذا الأسبوع ودرجاته فيها:', ...it.days.map(x => '• ' + WN_DAYS[x.d] + ': ' + (x.passage || 'غير محدد') + ' — ' + (x.abs ? 'غياب' : x.missing ? 'لم يُرصد' : x.v + ' من ' + WN_DAY_MAX))]
+      : ['تفاصيل أيام الحفظ: ' + it.cells.join('، ') + '.']),
     '',
     'ما يحتاجه ابنكم:',
     ...needs,
@@ -1167,6 +1235,36 @@ function wnThanksText(it, label) {
     'على إتمامه حفظ ' + label.replace(/^.*— الأسبوع /, 'الأسبوع ') + ' كاملًا بالدرجة الكاملة (' + it.sum + ' من ' + it.max + ') دون أي غياب في أيام الحفظ.',
     'ونشكر لكم حرصكم ومتابعتكم، فهذا ثمرة جهدكم معه.',
     'نسأل الله أن يجعله من أهل القرآن الذين هم أهل الله وخاصته.',
+    '',
+    'معلم القرآن الكريم'].join('\n');
+}
+
+
+// رسائل الشكر على تعويض مقاطع الخطة العلاجية: مقطع كان غيابًا أو 3 فأقل، ثم أصبح 4 فأكثر
+function wnMakeups() {
+  const app = window.__app, db = app.db, out = [];
+  const stuByUid = new Map(db.students.filter(s => (s.subject || 'quran') === 'quran').map(s => [s.studentUid, s]));
+  for (const [recKey, rec] of Object.entries(db.weeklyNotices || {})) {
+    if (rec.type !== 'remedial' || !Array.isArray(rec.weak) || !rec.weak.length) continue;
+    const [t, p, w, uid] = recKey.split('|'), s = stuByUid.get(uid); if (!s) continue;
+    const sent = new Set(rec.improvedSent || []), improved = [];
+    for (const x of rec.weak) {
+      if (sent.has(x.k)) continue;
+      const g = db.grades[x.k], v = g ? Number(g.value) || 0 : null;
+      if (v !== null && v >= WN_MAKEUP_MIN && (x.v === 'abs' || v > Number(x.v))) improved.push({ k: x.k, from: x.v, to: v, passage: x.passage, day: x.day });
+    }
+    if (!improved.length) continue;
+    out.push({ uid, name: app.cleanName(s.name), section: s.section || db.sections[0], recKey, improved, remaining: rec.weak.filter(x => !sent.has(x.k)).length - improved.length, weekLabel: wnWeekLabel(+t, +p, +w), sum: improved.length, max: rec.weak.length, pct: 100, cells: [] });
+  }
+  return out.sort((a, b) => a.section.localeCompare(b.section, 'ar') || a.name.localeCompare(b.name, 'ar'));
+}
+function wnMakeupText(it) {
+  return ['خطاب شكر وعرفان — تعويض مقاطع الخطة العلاجية',
+    'نشكر ابنكم الطالب ' + it.name + ' (' + it.section + ')',
+    'على عودته وتسميع ما كان يحتاج إلى تعويض من خطة ' + it.weekLabel.replace(/^.*— الأسبوع /, 'الأسبوع ') + ':',
+    ...it.improved.map(m => '• ' + (m.passage || m.day) + ' — ' + (m.from === 'abs' ? 'كان غائبًا' : 'كانت درجته ' + m.from) + '، وأصبحت ' + m.to + ' من ' + WN_DAY_MAX),
+    it.remaining > 0 ? 'وبقي ' + it.remaining + (it.remaining === 1 ? ' مقطع' : ' مقاطع') + ' نرجو متابعته في تعويضها.' : 'وبهذا أتمّ تعويض كل ما في الخطة، بارك الله فيه.',
+    'وهذا دليل على حرصه وحرصكم، فجزاكم الله خيرًا.',
     '',
     'معلم القرآن الكريم'].join('\n');
 }
@@ -1256,6 +1354,27 @@ async function wnBuild(host) {
   };
   table('كشف الخطط العلاجية (أقل من ' + WN_THRESHOLD + '٪)', r.remedial, 'remedial');
   table('كشف خطابات الشكر والعرفان (الدرجة الكاملة في أيام الحفظ دون غياب)', r.thanks, 'thanks');
+  const mks = wnMakeups();
+  {
+    const h = document.createElement('h4'); h.textContent = 'رسائل الشكر على تعويض مقاطع الخطة العلاجية (' + mks.length + ')'; out.appendChild(h);
+    const pnote = document.createElement('p'); pnote.className = 'muted'; pnote.textContent = 'لمن أُرسلت له خطة علاجية ثم أعاد تسميع مقطع منها بدرجة ' + WN_MAKEUP_MIN + ' فأكثر. تظهر هنا مهما كان الأسبوع المختار.'; out.appendChild(pnote);
+    if (mks.length) {
+      const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:760px';
+      tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>الطالب</th><th>ما عوّضه</th><th>ولي الأمر</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+      for (const it of mks) {
+        const parents = wnState.links ? (wnState.links.get(it.uid) || []) : null;
+        const tr = document.createElement('tr');
+        const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb);
+        const c1 = document.createElement('td'); c1.textContent = it.name + ' — ' + it.section;
+        const c2 = document.createElement('td'); c2.textContent = it.improved.length + ' من ' + it.max + ' — ' + it.weekLabel;
+        const c3 = document.createElement('td'); c3.textContent = parents === null ? 'غير معروف' : parents.length ? 'مرتبط' : 'لا يوجد ولي أمر مرتبط';
+        const c4 = document.createElement('td'), ta = document.createElement('textarea'); ta.value = wnMakeupText(it); ta.rows = 8; ta.style.cssText = 'width:100%;min-width:320px;font:13px Tahoma'; c4.appendChild(ta);
+        tr.append(c0, c1, c2, c3, c4); tb.tBodies[0].appendChild(tr);
+        wnState.items['makeup|' + it.recKey + '|' + it.improved.map(m => m.k).join(',')] = { it, type: 'makeup', cb, ta, parents, recKey: it.recKey, doneKey: it.recKey + '|makeup|' + Date.now() };
+      }
+      out.appendChild(tb);
+    }
+  }
   const bar = document.createElement('div'); bar.style.marginTop = '10px';
   const send = document.createElement('button'); send.type = 'button'; send.textContent = 'اعتماد وإرسال المحدد إلى أولياء الأمور';
   const pr = document.createElement('button'); pr.type = 'button'; pr.textContent = 'طباعة الكشفين';
@@ -1298,8 +1417,8 @@ async function wnSend(host, st) {
   const chosen = Object.values(wnState.items).filter(x => x.cb.checked && !x.cb.disabled);
   if (!chosen.length) { st.textContent = 'لم تحدد أي طالب للإرسال.'; return; }
   if (!wnState.links) { st.textContent = 'سجّل الدخول من «بوابة أولياء الأمور» أولًا، ثم أعد التجهيز.'; return; }
-  const rem = chosen.filter(x => x.type === 'remedial').length, th = chosen.length - rem;
-  if (!confirm('سيُرسل إلى أولياء الأمور المرتبطين: ' + rem + ' خطة علاجية و' + th + ' خطاب شكر عن ' + wnState.week.label + '.\nمتابعة؟')) return;
+  const rem = chosen.filter(x => x.type === 'remedial').length, mk = chosen.filter(x => x.type === 'makeup').length, th = chosen.length - rem - mk;
+  if (!confirm('سيُرسل إلى أولياء الأمور المرتبطين: ' + rem + ' خطة علاجية و' + th + ' خطاب شكر' + (mk ? ' و' + mk + ' رسالة شكر على التعويض' : '') + ' عن ' + wnState.week.label + '.\nمتابعة؟')) return;
   db.weeklyNotices = db.weeklyNotices || {};
   let ok = 0, fail = 0;
   for (const x of chosen) {
@@ -1311,7 +1430,17 @@ async function wnSend(host, st) {
       if (error) { good = false; break; }
       for (const r of (Array.isArray(data) ? data : data ? [data] : [])) if (r && r.id !== undefined) ids.push(String(r.id));
     }
-    if (good && (x.parents || []).length) { db.weeklyNotices[x.doneKey] = { at: new Date().toISOString(), type: x.type, ids }; ok++; } else fail++;
+    if (good && (x.parents || []).length) {
+      if (x.type === 'makeup') {
+        const rec = db.weeklyNotices[x.recKey]; if (rec) rec.improvedSent = [...new Set([...(rec.improvedSent || []), ...x.it.improved.map(m => m.k)])];
+        db.weeklyNotices[x.doneKey] = { at: new Date().toISOString(), type: 'makeup', ids };
+      } else {
+        const rec = { at: new Date().toISOString(), type: x.type, ids };
+        if (x.type === 'remedial') rec.weak = (x.it.days || []).filter(d => d.abs || (d.v !== null && d.v <= WN_WEAK_MAX)).map(d => ({ k: d.k, v: d.abs ? 'abs' : d.v, passage: d.passage || '', day: WN_DAYS[d.d] }));
+        db.weeklyNotices[x.doneKey] = rec;
+      }
+      ok++;
+    } else fail++;
     st.textContent = 'جارٍ الإرسال... ' + (ok + fail) + ' من ' + chosen.length;
   }
   app.save();
@@ -1823,6 +1952,7 @@ async function renderParentTab(root) {
   root.querySelector('#paLogout').onclick=async()=>{await supa.auth.signOut();loginBox(root,'parentPortal');};
   root.querySelector('#paSyncAll').onclick=()=>syncReports(root,students);
   wnRender(root.querySelector('#wnHost'));
+  qpRender(root.querySelector('#wnHost'));
   cnRender(root.querySelector('#wnHost'));
   vnRender(root.querySelector('#wnHost'));
 
