@@ -1628,6 +1628,7 @@ function cnCompute(t, p) {
     const defs = (app.courseDefs[subject] || []).filter(d => CN_CATS.includes(d.id));
     if (!defs.length) continue;
     for (const section of db.sections) {
+      if (subject === 'life' && !/(أول\s*متوسط\s*[٦6]|^1\/6$|^١\/٦$)/.test(section)) continue; // المهارات الحياتية لشعبة ٦ فقط
       const { cols, studs } = cnPastColumns(subject, t, p, section);
       if (!studs.length) continue;
       const sk = cnSnapKey(subject, t, p, section), snap = snaps[sk];
