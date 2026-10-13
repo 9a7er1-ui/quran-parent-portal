@@ -1110,6 +1110,11 @@ const wnState = { items: {}, links: null };
 // ---------- توزيع مقرر القرآن (المقطع المقرر لكل يوم) ----------
 // مقترح من استمارتي الفصل الأول: الفترة الأولى = الأسابيع 1–6 من استمارتها + أسبوع 30/4 في الأسبوع السابع؛ الفترة الثانية تبدأ 7/5 (الأسابيع 1–5)، والأسبوعان 6–7 (سورة الرعد) لاحقًا.
 const QP_SEED = {"0|0|0|0": {"date": "17/3", "surah": "الإسراء", "from": 1, "to": 6}, "0|0|0|1": {"date": "18/3", "surah": "الإسراء", "from": 7, "to": 12}, "0|0|0|2": {"date": "19/3", "surah": "الإسراء", "from": 13, "to": 17}, "0|0|0|3": {"date": "20/3", "surah": "الإسراء", "from": 18, "to": 24}, "0|0|0|4": {"date": "21/3", "surah": "يوسف", "from": 1, "to": 29}, "0|0|1|0": {"date": "24/3", "surah": "الإسراء", "from": 25, "to": 32}, "0|0|1|1": {"date": "25/3", "surah": "الإسراء", "from": 33, "to": 44}, "0|0|1|2": {"date": "26/3", "surah": "الإسراء", "from": 45, "to": 53}, "0|0|1|3": {"date": "27/3", "surah": "الإسراء", "from": 54, "to": 60}, "0|0|1|4": {"date": "28/3", "surah": "يوسف", "from": 30, "to": 53}, "0|0|2|0": {"date": "2/4", "surah": "الإسراء", "from": 61, "to": 69}, "0|0|2|1": {"date": "3/4", "surah": "الإسراء", "from": 70, "to": 79}, "0|0|2|2": {"date": "4/4", "surah": "الإسراء", "from": 80, "to": 89}, "0|0|2|3": {"date": "5/4", "surah": "الإسراء", "from": 90, "to": 98}, "0|0|2|4": {"date": "6/4", "surah": "يوسف", "from": 54, "to": 81}, "0|0|3|0": {"date": "9/4", "surah": "الإسراء", "from": 99, "to": 104}, "0|0|3|1": {"date": "10/4", "surah": "الإسراء", "from": 105, "to": 111}, "0|0|3|2": {"date": "11/4", "surah": "النحل", "from": 1, "to": 9}, "0|0|3|3": {"date": "12/4", "note": "إجازة اليوم الوطني"}, "0|0|3|4": {"date": "13/4", "note": ""}, "0|0|4|0": {"date": "16/4", "surah": "النحل", "from": 10, "to": 14}, "0|0|4|1": {"date": "17/4", "surah": "النحل", "from": 15, "to": 23}, "0|0|4|2": {"date": "18/4", "surah": "النحل", "from": 24, "to": 29}, "0|0|4|3": {"date": "19/4", "surah": "النحل", "from": 30, "to": 34}, "0|0|4|4": {"date": "20/4", "surah": "يوسف", "from": 82, "to": 111}, "0|0|5|0": {"date": "23/4", "surah": "النحل", "from": 35, "to": 37}, "0|0|5|1": {"date": "24/4", "surah": "النحل", "from": 38, "to": 44}, "0|0|5|2": {"date": "25/4", "surah": "النحل", "from": 45, "to": 55}, "0|0|5|3": {"date": "26/4", "surah": "النحل", "from": 56, "to": 62}, "0|0|5|4": {"date": "27/4", "surah": "هود", "from": 1, "to": 24}, "0|0|6|0": {"date": "30/4", "surah": "النحل", "from": 63, "to": 67}, "0|0|6|1": {"date": "1/5", "surah": "النحل", "from": 68, "to": 74}, "0|0|6|2": {"date": "2/5", "surah": "النحل", "from": 75, "to": 79}, "0|0|6|3": {"date": "3/5", "surah": "النحل", "from": 80, "to": 87}, "0|0|6|4": {"date": "4/5", "surah": "هود", "from": 25, "to": 49}, "0|1|0|0": {"date": "7/5", "surah": "النحل", "from": 88, "to": 93}, "0|1|0|1": {"date": "8/5", "surah": "النحل", "from": 94, "to": 102}, "0|1|0|2": {"date": "9/5", "surah": "النحل", "from": 103, "to": 110}, "0|1|0|3": {"date": "10/5", "surah": "النحل", "from": 111, "to": 118}, "0|1|0|4": {"date": "11/5", "surah": "هود", "from": 50, "to": 96}, "0|1|1|0": {"date": "14/5", "surah": "النحل", "from": 119, "to": 128}, "0|1|1|1": {"date": "15/5", "surah": "الحجر", "from": 1, "to": 13}, "0|1|1|2": {"date": "16/5", "surah": "الحجر", "from": 14, "to": 25}, "0|1|1|3": {"date": "17/5", "surah": "الحجر", "from": 26, "to": 44}, "0|1|1|4": {"date": "18/5", "surah": "هود", "from": 97, "to": 123}, "0|1|2|0": {"date": "21/5", "surah": "الحجر", "from": 45, "to": 60}, "0|1|2|1": {"date": "22/5", "surah": "الحجر", "from": 61, "to": 84}, "0|1|2|2": {"date": "23/5", "surah": "الحجر", "from": 85, "to": 99}, "0|1|2|3": {"date": "24/5", "surah": "إبراهيم", "from": 1, "to": 5}, "0|1|2|4": {"date": "25/5", "surah": "يونس", "from": 1, "to": 20}, "0|1|3|0": {"date": "28/5", "surah": "إبراهيم", "from": 6, "to": 9}, "0|1|3|1": {"date": "29/5", "surah": "إبراهيم", "from": 10, "to": 12}, "0|1|3|2": {"date": "30/5", "surah": "إبراهيم", "from": 13, "to": 18}, "0|1|3|3": {"date": "1/6", "surah": "إبراهيم", "from": 19, "to": 22}, "0|1|3|4": {"date": "2/6", "surah": "يونس", "from": 21, "to": 47}, "0|1|4|0": {"date": "5/6", "surah": "إبراهيم", "from": 23, "to": 31}, "0|1|4|1": {"date": "6/6", "surah": "إبراهيم", "from": 32, "to": 37}, "0|1|4|2": {"date": "7/6", "surah": "إبراهيم", "from": 38, "to": 44}, "0|1|4|3": {"date": "8/6", "surah": "إبراهيم", "from": 45, "to": 52}, "0|1|4|4": {"date": "9/6", "surah": "يونس", "from": 48, "to": 70}};
+const QP_AR = '٠١٢٣٤٥٦٧٨٩';
+function qpToAr(v) { return String(v ?? '').replace(/[0-9]/g, c => QP_AR[c]); }
+function qpFromAr(v) { return String(v ?? '').replace(/[\u200e\u200f\u061c]/g, '').replace(/[٠-٩]/g, c => QP_AR.indexOf(c)).replace(/[۰-۹]/g, c => '۰۱۲۳۴۵۶۷۸۹'.indexOf(c)).trim(); }
+// التاريخ يُعرض: اليوم يمينًا والشهر يسارًا بالأرقام الهندية (علامة RLM تمنع انقلاب الترتيب)
+function qpDateShow(v) { const s = qpFromAr(v); const m = s.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/); return m ? qpToAr(m[1]) + '\u200f/' + qpToAr(m[2]) : qpToAr(s); }
 function qpEntry(t, p, w, d) { const db = window.__app.db, days = db.quranPlan && db.quranPlan.days; return days ? days[[t, p, w, d].join('|')] || null : null; }
 function qpText(e) { return e && e.surah ? 'سورة ' + e.surah + ' من آية ' + e.from + ' إلى آية ' + e.to : ''; }
 
@@ -1138,14 +1143,15 @@ function qpDraw(box) {
   note.textContent = hasSaved ? '✓ توزيع هذه الفترة معتمد. يمكنك تعديله ثم الاعتماد من جديد.' : (Object.keys(QP_SEED).some(k => k.startsWith(t + '|' + p + '|')) ? 'هذا مقترح من الاستمارة ولم يُعتمد بعد. راجع أن كل أسبوع في مكانه الصحيح ثم اضغط «اعتماد التوزيع».' : 'لا يوجد توزيع لهذه الفترة بعد. اكتبه ثم اضغط «اعتماد التوزيع».');
   out.appendChild(note);
   const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:620px';
-  tb.innerHTML = '<thead><tr><th>الأسبوع</th><th>اليوم</th><th>التاريخ</th><th>السورة</th><th>من آية</th><th>إلى آية</th><th>النوع</th></tr></thead><tbody></tbody>';
+  tb.innerHTML = '<thead><tr><th style="text-align:center">الأسبوع</th><th style="text-align:center">اليوم</th><th style="text-align:center">التاريخ</th><th style="text-align:center">السورة</th><th style="text-align:center">من آية</th><th style="text-align:center">إلى آية</th><th style="text-align:center">النوع</th></tr></thead><tbody></tbody>';
   const inputs = [];
   for (let w = 0; w < 7; w++) for (let d = 0; d < 5; d++) {
     const k = [t, p, w, d].join('|'), e = src[k] || {}, tr = document.createElement('tr');
     if (d === 0) tr.style.borderTop = '3px solid #9fb8ad';
-    const mk = (val, width, type) => { const i = document.createElement('input'); i.value = val ?? ''; i.style.cssText = 'width:' + width + ';padding:4px'; if (type) { i.type = type; i.min = 1; } return i; };
-    const date = mk(e.date || '', '70px'), sur = mk(e.surah || e.note || '', '110px'), fr = mk(e.from, '64px', 'number'), to = mk(e.to, '64px', 'number');
-    const c = x => { const td = document.createElement('td'); if (typeof x === 'string') td.textContent = x; else td.appendChild(x); return td; };
+    const mk = (val, width, numeric) => { const i = document.createElement('input'); i.value = val ?? ''; i.style.cssText = 'width:' + width + ';padding:4px;text-align:center'; if (numeric) { i.inputMode = 'numeric'; i.onblur = () => { i.value = qpToAr(qpFromAr(i.value)); }; } return i; };
+    const date = mk(qpDateShow(e.date || ''), '80px'), sur = mk(e.surah || e.note || '', '120px'), fr = mk(qpToAr(e.from ?? ''), '64px', true), to = mk(qpToAr(e.to ?? ''), '64px', true);
+    date.onblur = () => { date.value = qpDateShow(date.value); };
+    const c = x => { const td = document.createElement('td'); td.style.textAlign = 'center'; if (typeof x === 'string') td.textContent = x; else td.appendChild(x); return td; };
     tr.append(c(d === 0 ? WN_WEEKS[w] : ''), c(WN_DAYS[d]), c(date), c(sur), c(fr), c(to), c(d === 4 ? 'تلاوة' : 'حفظ'));
     tb.tBodies[0].appendChild(tr);
     inputs.push({ k, date, sur, fr, to });
@@ -1155,7 +1161,7 @@ function qpDraw(box) {
   refill.onclick = () => {
     for (const x of inputs) {
       const e = QP_SEED[x.k] || {};
-      x.date.value = e.date || ''; x.sur.value = e.surah || e.note || ''; x.fr.value = e.from ?? ''; x.to.value = e.to ?? '';
+      x.date.value = qpDateShow(e.date || ''); x.sur.value = e.surah || e.note || ''; x.fr.value = qpToAr(e.from ?? ''); x.to.value = qpToAr(e.to ?? '');
     }
     note.style.cssText = 'color:#7a5600;font-weight:bold';
     note.textContent = 'عُبّئ الجدول من الاستمارة ولم يُحفظ بعد. راجعه ثم اضغط «اعتماد التوزيع لهذه الفترة».';
@@ -1166,7 +1172,7 @@ function qpDraw(box) {
   btn.onclick = () => {
     const app = window.__app, db2 = app.db; db2.quranPlan = db2.quranPlan || { days: {} }; db2.quranPlan.days = db2.quranPlan.days || {};
     for (const x of inputs) {
-      const sur = x.sur.value.trim(), fr = parseInt(x.fr.value, 10), to = parseInt(x.to.value, 10), date = x.date.value.trim();
+      const sur = x.sur.value.trim(), fr = parseInt(qpFromAr(x.fr.value), 10), to = parseInt(qpFromAr(x.to.value), 10), date = qpFromAr(x.date.value).replace(/\s+/g, '');
       if (sur && fr > 0 && to >= fr) db2.quranPlan.days[x.k] = { date, surah: sur, from: fr, to };
       else if (date || sur) db2.quranPlan.days[x.k] = { date, note: sur };
       else delete db2.quranPlan.days[x.k];
