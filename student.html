@@ -16,7 +16,7 @@
   }
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.75 "IBM Plex Sans Arabic","Segoe UI",Tahoma,"Geeza Pro",Arial,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+  body{font-variant-ligatures:no-common-ligatures;font-feature-settings:"liga" 0,"dlig" 0;margin:0;background:var(--bg);color:var(--ink);font:17px/1.75 "IBM Plex Sans Arabic","Segoe UI",Tahoma,"Geeza Pro",Arial,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
   .wrap{max-width:920px;margin:0 auto;padding:0 12px}
   header{background:var(--green);color:#fff;padding:calc(18px + env(safe-area-inset-top)) 16px 18px;margin-bottom:12px}
   header h1{margin:0;font-size:1.35rem;font-weight:700}
@@ -199,38 +199,55 @@ function levelClass(pct){if(pct===null||pct===undefined||!Number.isFinite(pct))r
 function lvl(pct){return `<span class="lvl ${levelClass(pct)}">${levelLabel(pct)}</span>`}
 function bar(pct){return pct===null||!Number.isFinite(pct)?'':`<div class="bar"><i style="width:${pct<=0?0:Math.max(2,Math.min(100,pct))}%"></i></div>`}
 
+const LEVEL_MIN_DONE=25; // لا يظهر التقدير قبل رصد ربع درجات الفترة على الأقل
 function quranCurrentLevel(rep){
-  const rows=(rep?.quran?.daily||[]).filter(r=>r.period===reportPeriod+1&&r.value!==null&&r.value!==undefined);
-  if(!rows.length)return {pct:null,earned:0,possible:0,count:0};
-  const earned=rows.reduce((a,r)=>a+Number(r.value||0),0),possible=rows.length*7;
-  return {pct:possible?earned/possible*100:null,earned,possible,count:rows.length};
+  const all=(rep?.quran?.daily||[]).filter(r=>r.period===reportPeriod+1&&!/إجازة|اختبار/.test(String(r.status||'')));
+  const rows=all.filter(r=>r.value!==null&&r.value!==undefined);
+  const earned=rows.reduce((a,r)=>a+Number(r.value||0),0),possible=rows.length*7,total=all.length*7;
+  return {pct:possible?earned/possible*100:null,earned,possible,count:rows.length,total,done:total?possible/total*100:0};
 }
 function courseCurrentLevel(rows){
   const r=(rows||[]).find(x=>x.period===reportPeriod+1);if(!r)return null;
-  let earned=0,possible=0,count=0;
-  const cats=(r.categories||[]).filter(c=>!c.violation).map(c=>{const maxPer=c.count?c.max/c.count:0,observedMax=(c.filled||0)*maxPer;earned+=Number(c.earned||0);possible+=observedMax;count+=Number(c.filled||0);return {...c,observedMax}});
-  return {pct:possible?earned/possible*100:null,earned,possible,count,cats,violations:r.violations||0,deduction:r.deduction||0,stars:r.stars||0,scaled:r.scaled,target:r.target,raw:r};
+  let earned=0,possible=0,count=0,total=0;
+  const cats=(r.categories||[]).filter(c=>!c.violation).map(c=>{const maxPer=c.count?c.max/c.count:0,observedMax=(c.filled||0)*maxPer;earned+=Number(c.earned||0);possible+=observedMax;total+=Number(c.max||0);count+=Number(c.filled||0);return {...c,observedMax}});
+  return {pct:possible?earned/possible*100:null,earned,possible,count,total,done:total?possible/total*100:0,cats,violations:r.violations||0,deduction:r.deduction||0,stars:r.stars||0,scaled:r.scaled,target:r.target,raw:r};
 }
+function enough(x){return x&&x.pct!==null&&x.done>=LEVEL_MIN_DONE}
 function overallCurrentLevel(rep){
-  const vals=[];const q=quranCurrentLevel(rep);if(q.pct!==null)vals.push(q.pct);
-  for(const key of ['islamic','tajweed','life']){const x=courseCurrentLevel(rep[key]);if(x&&x.pct!==null)vals.push(x.pct)}
+  const vals=[];const q=quranCurrentLevel(rep);if(rep.quran&&enough(q))vals.push(q.pct);
+  for(const key of ['islamic','tajweed','life']){const x=courseCurrentLevel(rep[key]);if(enough(x))vals.push(x.pct)}
   return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
 }
 
 // ---------- المختصر: المستوى العام وبطاقات المواد ----------
+function levelBadge(x){
+  if(!x||x.pct===null)return '<span class="lvl none">لم يبدأ الرصد</span>';
+  if(x.done<LEVEL_MIN_DONE)return '<span class="lvl none">الرصد في بدايته</span>';
+  return lvl(x.pct);
+}
+function doneBar(x){
+  const d=Math.max(0,Math.min(100,x.done||0));
+  return `<div class="bar" title="اكتمال الرصد"><i style="width:${d<=0?0:Math.max(2,d)}%"></i></div><p class="muted" style="margin:2px 0 6px">اكتمل رصد ${pctTxt(d)} من درجات الفترة</p>`;
+}
+function levelLine(x){
+  if(!x||x.pct===null)return '';
+  if(x.done<LEVEL_MIN_DONE)return `<p>أداؤه فيما رُصد حتى الآن: ${of(Math.round(x.earned*10)/10,Math.round(x.possible*10)/10)} <span class="muted">(يظهر التقدير بعد رصد ربع درجات الفترة)</span></p>`;
+  return `<p>${levelLabel(x.pct)} فيما رُصد حتى الآن: ${of(Math.round(x.earned*10)/10,Math.round(x.possible*10)/10)}</p>`;
+}
 function renderLevels(rep){
   const q=quranCurrentLevel(rep),st=rep.quran?.stats||{},overall=overallCurrentLevel(rep);
   const cards=[];
   if(rep.quran){
-    const line=q.count?`متوسط التسميع ${n((q.earned/q.count).toFixed(1))} من ${n(7)}`+(st.attendanceRate!==null&&st.attendanceRate!==undefined?` • الحضور ${pctTxt(st.attendanceRate)}`:''):'لا يوجد تسميع مرصود في هذه الفترة.';
-    cards.push(`<div class="subject"><h4>القرآن الكريم ${lvl(q.pct)}</h4>${bar(q.pct)}<p>${q.count?'الدرجات: '+of(q.earned,q.possible):''}</p><p class="muted">${line}</p></div>`);
+    const extra=q.count?`متوسط التسميع ${n((q.earned/q.count).toFixed(1))} من ${n(7)}`+(st.attendanceRate!==null&&st.attendanceRate!==undefined?` • الحضور ${pctTxt(st.attendanceRate)}`:''):'لا يوجد تسميع مرصود في هذه الفترة.';
+    cards.push(`<div class="subject"><h4>القرآن الكريم ${levelBadge(q)}</h4>${doneBar(q)}${levelLine(q)}<p class="muted">${extra}</p></div>`);
   }
   for(const [key,title] of [['islamic','الدراسات الإسلامية'],['tajweed','التجويد'],['life','المهارات الحياتية']]){
     const c=courseCurrentLevel(rep[key]);if(!c)continue;
-    const res=c.scaled!==null&&c.scaled!==undefined?'نتيجة الفترة: '+of(c.scaled,c.target):'';
-    cards.push(`<div class="subject"><h4>${title} ${lvl(c.pct)}</h4>${bar(c.pct)}<p>${res}</p><p class="muted">${c.possible?'المرصود حتى الآن: '+of(Math.round(c.earned*10)/10,Math.round(c.possible*10)/10):'لم يبدأ الرصد بعد.'}${c.violations?` • مخالفات: ${n(c.violations)}`:''}</p></div>`);
+    const sum=c.scaled!==null&&c.scaled!==undefined?`<p class="muted">المجموع المحتسب حتى الآن: ${of(c.scaled,c.target)}${c.done<100?' — لم يكتمل الرصد':''}</p>`:'';
+    cards.push(`<div class="subject"><h4>${title} ${levelBadge(c)}</h4>${doneBar(c)}${c.pct===null?'<p class="muted">لم يبدأ الرصد بعد.</p>':levelLine(c)}${sum}${c.violations?`<p class="muted">مخالفات: ${n(c.violations)}</p>`:''}</div>`);
   }
-  return `<div class="card"><div class="overall"><div><h3 style="margin:0">المستوى العام</h3><span class="muted">من الدرجات المرصودة فعلًا في الفترة المختارة</span></div><div class="big">${levelLabel(overall)} ${overall===null?'':pctTxt(overall)}</div></div>${bar(overall)}<div class="subjects">${cards.join('')}</div></div>`;
+  const head=overall===null?'<div class="big" style="font-size:1.2rem">الرصد في بدايته</div>':`<div class="big">${levelLabel(overall)} ${pctTxt(overall)}</div>`;
+  return `<div class="card"><div class="overall"><div><h3 style="margin:0">المستوى العام</h3><span class="muted">فيما رُصد حتى الآن، للمواد التي اكتمل ربع رصدها على الأقل</span></div>${head}</div><div class="subjects">${cards.join('')}</div></div>`;
 }
 
 function renderTeacherCards(rep){
