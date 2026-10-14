@@ -31,14 +31,17 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function uniqueStudents() {
-  const app = window.__app, seen = new Map();
+  const app = window.__app, seen = new Map(), active = new Set(), withdrawnMaster = new Set();
   for (const s of app.db.students) {
     if (!s.studentUid) continue; // احتياطًا فقط؛ الترحيل التلقائي في index.html يمنع هذه الحالة عمليًا
+    if ((s.status || 'active') === 'active') active.add(s.studentUid);
+    if ((s.subject || 'quran') === 'quran' && (s.status || 'active') !== 'active') withdrawnMaster.add(s.studentUid);
     if (!seen.has(s.studentUid)) {
       seen.set(s.studentUid, { key: s.studentUid, name: app.cleanName(s.name), section: s.section || app.db.sections[0] });
     }
   }
-  return [...seen.values()].sort((a, b) => a.section.localeCompare(b.section, 'ar') || a.name.localeCompare(b.name, 'ar'));
+  // الطالب المنسحب (كل سجلاته «منسحب») لا يظهر في قوائم أولياء الأمور ولا تُطبع له بطاقة ولا يُنشر له تقرير جديد
+  return [...seen.values()].filter(x => active.has(x.key) && !withdrawnMaster.has(x.key)).sort((a, b) => a.section.localeCompare(b.section, 'ar') || a.name.localeCompare(b.name, 'ar'));
 }
 
 // ---------- بناء تقرير طالب واحد لعرضه لولي الأمر ----------
