@@ -515,7 +515,7 @@ function renderAuthForm(mode){
       msg.classList.remove('error');msg.textContent='جارٍ الإرسال...';
       const {error}=await supa.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
       if(error){msg.classList.add('error');msg.textContent=friendlyAuthError(error.message);return}
-      msg.textContent='إن كان البريد مسجّلًا فسيصلك خلال دقائق رابط لتعيين كلمة مرور جديدة. افتحه من هذا الجهاز نفسه. وإن لم تجده فابحث في البريد غير المرغوب فيه (Junk/Spam).';
+      renderCodeForm('recovery',email);
     };
     return;
   }
@@ -545,9 +545,40 @@ function renderAuthForm(mode){
     if(error){msg.textContent=friendlyAuthError(error.message);msg.classList.add('error');return}
     if(data&&data.user&&Array.isArray(data.user.identities)&&data.user.identities.length===0){msg.classList.add('error');msg.textContent='هذا البريد مسجّل من قبل. اختر «لديّ حساب»، أو «نسيت كلمة المرور».';return}
     if(data&&data.session){showReports();return}
-    msg.textContent='أرسلنا رسالة تأكيد إلى بريدك. افتحها من هذا الجهاز نفسه، وسيُربط ابنك تلقائيًا بعد الدخول. وإن لم تجدها خلال دقائق فابحث في البريد غير المرغوب فيه (Junk/Spam).';
+    renderCodeForm('signup',email);
   };
 }
+
+// إدخال الرمز المرسل بالبريد (أسلم من الرابط: بعض برامج البريد مثل Hotmail تفتح الروابط تلقائيًا فتُبطلها)
+function renderCodeForm(type,email){
+  const rec=type==='recovery';
+  authBox.innerHTML=`<h3>${rec?'استعادة كلمة المرور':'تأكيد الحساب'}</h3>
+    <p class="muted">أرسلنا ${rec?'رمز الاستعادة':'رمز التأكيد'} إلى: <b>${escapeHtml(email)}</b><br>افتح بريدك واكتب الرمز هنا. إن لم تجد الرسالة خلال دقيقتين فابحث في البريد غير المرغوب فيه (Junk/Spam).</p>
+    <form id="codeForm" autocomplete="on">
+      <input type="email" name="email" autocomplete="username" value="${escapeHtml(email)}" style="display:none">
+      <input id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="الرمز المرسل إلى بريدك" style="text-align:center;letter-spacing:6px;font-size:1.3rem">
+      ${rec?passField('newPass','new-password','كلمة المرور الجديدة')+passField('newPass2','new-password','أعد كتابتها'):''}
+      <button type="submit">${rec?'حفظ كلمة المرور الجديدة':'تأكيد الحساب والدخول'}</button>
+    </form>
+    <p id="paMsg" class="error"></p>
+    <button type="button" class="secondary" id="resendBtn">إعادة إرسال الرمز</button>
+    <button type="button" class="secondary" id="backLogin">رجوع لتسجيل الدخول</button>`;
+  wireEyes(authBox);
+  document.getElementById('backLogin').onclick=()=>renderAuthForm('login');
+  document.getElementById('resendBtn').onclick=async()=>{const m=document.getElementById('paMsg');m.classList.remove('error');m.textContent='جارٍ الإرسال...';const {error}=rec?await supa.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname}):await supa.auth.resend({type:'signup',email,options:{emailRedirectTo:location.origin+location.pathname}});if(error){m.classList.add('error');m.textContent=friendlyAuthError(error.message);return}m.textContent='✓ أُرسل رمز جديد. استخدم الرمز الأحدث فقط.'};
+  document.getElementById('codeForm').onsubmit=async ev=>{
+    ev.preventDefault();const token=qpDigits(document.getElementById('otpCode').value),msg=document.getElementById('paMsg');
+    if(token.length<6){msg.textContent='اكتب الرمز كاملًا كما وصلك.';return}
+    let pass='';
+    if(rec){pass=document.getElementById('newPass').value;if(pass.length<6){msg.textContent='كلمة المرور الجديدة 6 خانات على الأقل.';return}if(pass!==document.getElementById('newPass2').value){msg.textContent='كلمتا المرور غير متطابقتين.';return}}
+    msg.classList.remove('error');msg.textContent='جارٍ التحقق...';
+    const {data,error}=await supa.auth.verifyOtp({email,token,type:rec?'recovery':'signup'});
+    if(error||!data?.session){msg.classList.add('error');msg.textContent=/expired|invalid/i.test(error?.message||'')?'الرمز غير صحيح أو انتهت صلاحيته. اضغط «إعادة إرسال الرمز» واستخدم الأحدث.':friendlyAuthError(error?.message||'تعذّر التحقق');return}
+    if(rec){const {error:e2}=await supa.auth.updateUser({password:pass});if(e2){msg.classList.add('error');msg.textContent=friendlyAuthError(e2.message);return}}
+    msg.textContent=rec?'✓ تم تعيين كلمة المرور الجديدة.':'✓ تم تأكيد حسابك.';setTimeout(showReports,700);
+  };
+}
+function qpDigits(v){return String(v||'').replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g,'')}
 
 function renderResetForm(){
   if(location.hash)history.replaceState(null,'',location.pathname+location.search);
@@ -576,7 +607,7 @@ if(!teacherPreview)(async()=>{
   supa.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY'){recovering=true;renderResetForm()}});
   const {data}=await supa.auth.getSession();
   if(recovering&&data.session){renderResetForm();return}
-  if(AUTH_ERR){renderAuthForm('login');const m=document.getElementById('paMsg');if(m)m.textContent=/expired|invalid/i.test(AUTH_ERR)?'انتهت صلاحية الرابط أو استُخدم من قبل. اطلب رابطًا جديدًا من «نسيت كلمة المرور».':AUTH_ERR;history.replaceState(null,'',location.pathname+location.search);return}
+  if(AUTH_ERR){renderAuthForm('login');const m=document.getElementById('paMsg');if(m)m.classList.remove('error');m.textContent=/expired|invalid/i.test(AUTH_ERR)?'هذا الرابط فُتح من قبل، وقد يكون برنامج البريد (مثل Hotmail) فتحه تلقائيًا للفحص فأكّد حسابك. جرّب تسجيل الدخول بالبريد وكلمة المرور. وإن لم ينجح فاضغط «نسيت كلمة المرور؟».':AUTH_ERR;history.replaceState(null,'',location.pathname+location.search);return}
   if(data.session){if(location.hash.includes('access_token'))history.replaceState(null,'',location.pathname+location.search);showReports()}else renderAuthForm(pendingCode()?'signup':'login');
 })();
 </script>
