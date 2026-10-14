@@ -553,7 +553,7 @@ function renderAuthForm(mode){
 function renderCodeForm(type,email){
   const rec=type==='recovery';
   authBox.innerHTML=`<h3>${rec?'استعادة كلمة المرور':'تأكيد الحساب'}</h3>
-    <p class="muted">أرسلنا ${rec?'رمز الاستعادة':'رمز التأكيد'} إلى: <b>${escapeHtml(email)}</b><br>افتح بريدك واكتب الرمز هنا. إن لم تجد الرسالة خلال دقيقتين فابحث في البريد غير المرغوب فيه (Junk/Spam).</p>
+    <p class="muted">أرسلنا ${rec?'رمز الاستعادة':'رمز التأكيد'} إلى: <b>${escapeHtml(email)}</b><br>افتح بريدك واكتب الرمز هنا. إن لم تجد الرسالة خلال دقيقتين فابحث في البريد غير المرغوب فيه (Junk/Spam)، وإن وجدتها هناك فاضغط «ليس بريدًا غير هام» (Not junk) لتصلك رسائل المعلم القادمة في البريد الوارد.</p>
     <form id="codeForm" autocomplete="on">
       <input type="email" name="email" autocomplete="username" value="${escapeHtml(email)}" style="display:none">
       <input id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="الرمز المرسل إلى بريدك" style="text-align:center;letter-spacing:6px;font-size:1.3rem">
