@@ -364,7 +364,7 @@ async function fsPostReloadCheck() {
   let stored = null, memOk = false;
   try { stored = fsReadStoredDb(); memOk = fsDeepDiff(stored, fsClone(window.__app.db), 1).count === 0; } catch (_) {}
   const fpNow = stored ? fsFp(stored) : '';
-  const kindText = { upload: 'الرفع الأول من هذا الجهاز', receive: 'الاستقبال من السحابة', restore: 'استعادة النسخة الاحتياطية', 'auto-receive': 'استقبال تلقائي لآخر نسخة من السحابة', 'restore-cloud': 'استعادة نسخة من سجل السحابة' }[pend.kind] || pend.kind;
+  const kindText = { upload: 'الرفع الأول من هذا الجهاز', receive: 'الاستقبال من السحابة', restore: 'استعادة النسخة الاحتياطية', 'auto-receive': 'استقبال تلقائي لآخر نسخة من السحابة', 'restore-cloud': 'استعادة نسخة من سجل السحابة', merge: 'دمج التغييرات من الجهازين' }[pend.kind] || pend.kind;
   if (stored && memOk && fpNow === pend.expectedFp) {
     if (pend.kind !== 'restore') { saveJSON(FS_BASE_KEY, { contentFp: pend.contentFp, fp: pend.expectedFp, at: new Date().toISOString(), kind: pend.kind }); fsSaveBaseContent(stored); }
     localStorage.removeItem(FS_PENDING_KEY);
@@ -1046,6 +1046,28 @@ async function fsShowConflict(ui, actions) {
       fsBadge('✓ متزامن', 'ok');
     }
     fsSim.conflict = { cloudFp: row.meta.fp, localFp: fsFp(local) };
+    const mp = document.getElementById('fsMergePanel'); if (mp) mp.remove();
+    if (base && d.count) {
+      const m = fsThreeWayMerge(base, local, row.db);
+      m.fromLocal = d.onlyLocal; m.fromCloud = d.onlyCloud;
+      fsSim.conflict.merge = m;
+      const panel = document.createElement('div'); panel.id = 'fsMergePanel'; panel.className = 'summary-card'; panel.style.cssText = 'border:2px solid #2e7d4f;margin:10px 0';
+      panel.innerHTML = '<b>✓ الحل الموصى به: دمج التغييرات من الطرفين</b><p class="muted">يأخذ ما تغيّر على هذا الجهاز فقط (' + d.onlyLocal + ') وما تغيّر في السحابة فقط (' + d.onlyCloud + ')، فلا يضيع شيء من الطرفين.</p>';
+      if (m.conflicts.length) {
+        const w = document.createElement('div');
+        w.innerHTML = '<p style="color:#b42318;font-weight:bold">' + m.conflicts.length + ' خانة غيّرها الطرفان بقيم مختلفة:</p>';
+        const ul = document.createElement('ul'); for (const x of m.conflicts.slice(0, 30)) { const li = document.createElement('li'); li.textContent = mgDescribe(x, local, row.db) + ': هذا الجهاز ' + fsShowVal(mgIsObj(x.l) && 'value' in x.l ? x.l.value : x.l) + ' — السحابة ' + fsShowVal(mgIsObj(x.c) && 'value' in x.c ? x.c.value : x.c); ul.appendChild(li); }
+        w.appendChild(ul); panel.appendChild(w);
+        const b1 = document.createElement('button'); b1.type = 'button'; b1.textContent = 'دمج، واعتماد قيم هذا الجهاز في الخانات المشتركة';
+        const b2 = document.createElement('button'); b2.type = 'button'; b2.textContent = 'دمج، واعتماد قيم السحابة في الخانات المشتركة';
+        b1.onclick = () => fsMergeResolve(ui, 'local'); b2.onclick = () => fsMergeResolve(ui, 'cloud');
+        panel.append(b1, document.createTextNode(' '), b2);
+      } else {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = 'دمج التغييرات من الطرفين (موصى به)';
+        b.onclick = () => fsMergeResolve(ui, 'local'); panel.appendChild(b);
+      }
+      ui.summary.insertBefore(panel, ui.summary.firstChild.nextSibling);
+    }
   } catch (e) { ui.status.textContent = 'تعذّرت المقارنة: ' + e.message + ' (لم يُكتب شيء)'; }
 }
 
@@ -2086,6 +2108,120 @@ async function lcGenerate(box) {
   </style></head><body><div class="bar"><button onclick="window.print()">طباعة / حفظ PDF</button> — ${cards.length} بطاقة في ${pages.length} صفحة</div>${pages.join('')}<script>setTimeout(function(){window.print()},700)<\/script></body></html>`);
   win.document.close();
   st.textContent = '✓ أُنشئت ' + cards.length + ' بطاقة' + (fail ? ' — تعذّر ' + fail : '') + '. اختر «حفظ بتنسيق PDF» في نافذة الطباعة لحفظ نسخة.';
+}
+
+
+// ============================================================
+// الدمج الآمن عند التعارض (ثلاثي: آخر مزامنة + هذا الجهاز + السحابة)
+// يأخذ كل تغيير حدث في طرف واحد فقط، ولا يقرر وحده في خانة غيّرها الطرفان (يعرضها للمعلم).
+// لا يعمل إلا إذا كانت نسخة «آخر مزامنة» محفوظة على هذا الجهاز.
+// ============================================================
+const MG_CELL_BUCKETS = ['grades', 'absences', 'tests', 'approvals', 'holidays', 'coursework'];
+function mgSame(a, b) { return fsCanon(a === undefined ? null : a) === fsCanon(b === undefined ? null : b); }
+function mgIsObj(x) { return x && typeof x === 'object' && !Array.isArray(x); }
+function mgValue(b, l, c, path, conf, atomic) {
+  if (mgSame(l, b)) return c;
+  if (mgSame(c, b)) return l;
+  if (mgSame(l, c)) return l;
+  if (!atomic && mgIsObj(l) && mgIsObj(c)) {
+    const B = mgIsObj(b) ? b : {}, out = {};
+    for (const k of new Set([...Object.keys(B), ...Object.keys(l), ...Object.keys(c)])) {
+      const v = mgValue(B[k], l[k], c[k], path + '|' + k, conf, false);
+      if (v !== undefined) out[k] = v;
+    }
+    return out;
+  }
+  conf.push({ path, l, c });
+  return l; // يُستبدل لاحقًا بحسب اختيار المعلم
+}
+function mgMap(B, L, C, field, conf) {
+  B = B || {}; L = L || {}; C = C || {}; const out = {};
+  for (const k of new Set([...Object.keys(B), ...Object.keys(L), ...Object.keys(C)])) {
+    const v = mgValue(B[k], L[k], C[k], field + '|' + k, conf, true);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+function mgStudents(B, L, C, conf) {
+  const by = a => new Map((a || []).map(s => [s.id, s]));
+  const b = by(B), l = by(L), c = by(C), out = new Map();
+  for (const id of new Set([...b.keys(), ...l.keys(), ...c.keys()])) {
+    const v = mgValue(b.get(id), l.get(id), c.get(id), 'students|' + id, conf, true);
+    if (v !== undefined) out.set(id, v);
+  }
+  const ids = a => (a || []).map(s => s.id);
+  const orderSrc = mgSame(ids(L), ids(B)) ? ids(C) : ids(L);
+  const order = orderSrc.filter(id => out.has(id));
+  for (const id of out.keys()) if (!order.includes(id)) order.push(id);
+  return order.map(id => out.get(id));
+}
+function mgAudit(B, L, C) {
+  const seen = new Map();
+  for (const e of [...(C || []), ...(L || [])]) if (e && !seen.has(e.id || e.at + e.text)) seen.set(e.id || e.at + e.text, e);
+  return [...seen.values()].sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, 500);
+}
+function fsThreeWayMerge(base, local, cloud) {
+  const conf = [], merged = {};
+  const keys = new Set([...Object.keys(base || {}), ...Object.keys(local || {}), ...Object.keys(cloud || {})]);
+  for (const f of keys) {
+    if (FS_UI_FIELDS.includes(f)) { merged[f] = fsClone(local[f] !== undefined ? local[f] : cloud[f]); continue; }
+    if (f === 'students') { merged[f] = mgStudents(base.students, local.students, cloud.students, conf); continue; }
+    if (f === 'auditLog') { merged[f] = mgAudit(base.auditLog, local.auditLog, cloud.auditLog); continue; }
+    if (MG_CELL_BUCKETS.includes(f)) { merged[f] = mgMap(base[f], local[f], cloud[f], f, conf); continue; }
+    const v = mgValue(base[f], local[f], cloud[f], f, conf, false);
+    if (v !== undefined) merged[f] = fsClone(v);
+  }
+  return { merged: fsClone(merged), conflicts: conf };
+}
+function mgApplyChoice(merged, conflicts, choice) {
+  const out = fsClone(merged);
+  for (const x of conflicts) {
+    const val = choice === 'cloud' ? x.c : x.l, parts = x.path.split('|');
+    let obj = out;
+    if (parts[0] === 'students') {
+      const i = out.students.findIndex(s => s.id === parts[1]);
+      if (val === undefined) { if (i >= 0) out.students.splice(i, 1); }
+      else if (i >= 0) out.students[i] = fsClone(val); else out.students.push(fsClone(val));
+      continue;
+    }
+    for (let i = 0; i < parts.length - 1; i++) { if (!mgIsObj(obj[parts[i]])) obj[parts[i]] = {}; obj = obj[parts[i]]; }
+    const last = parts[parts.length - 1];
+    if (val === undefined) delete obj[last]; else obj[last] = fsClone(val);
+  }
+  return out;
+}
+function mgDescribe(x, local, cloud) {
+  const p = x.path.split('|'), stu = {};
+  for (const s of [...(cloud.students || []), ...(local.students || [])]) stu[s.id] = s;
+  if (MG_CELL_BUCKETS.includes(p[0])) { const [who, what] = fsKeyDescribe(p[0], p.slice(1).join('|'), stu); return who + ' — ' + what; }
+  if (p[0] === 'students') return 'سجل الطالب ' + ((stu[p[1]] && stu[p[1]].name) || p[1]);
+  return (FS_FIELD_LABELS[p[0]] || p[0]) + (p.length > 1 ? ' (' + p.slice(1).join(' / ') + ')' : '');
+}
+
+async function fsMergeResolve(ui, choice) {
+  const c = fsSim.conflict; if (!c || !c.merge) return;
+  try {
+    const { stored: local, memMatches } = fsSourceDb();
+    if (!memMatches || fsFp(local) !== c.localFp) throw new Error('تغيّرت بيانات هذا الجهاز؛ اعرض الفروق من جديد.');
+    const current = await fsFetchRow(FULL_ROW_ID);
+    if (!current || current.meta.fp !== c.cloudFp) throw new Error('تغيّرت السحابة؛ اعرض الفروق من جديد.');
+    const merged = mgApplyChoice(c.merge.merged, c.merge.conflicts, choice);
+    if (!fsValidDb(merged)) throw new Error('نتيجة الدمج غير صالحة؛ لم يتغير شيء.');
+    if (!(merged.syncMarks && merged.syncMarks.islamicTestsReset)) throw new Error('نتيجة الدمج تفتقد علامة المزامنة؛ لم يتغير شيء.');
+    const msg = 'سيُدمج: ' + c.merge.fromLocal + ' تغييرًا من هذا الجهاز، و' + c.merge.fromCloud + ' من السحابة' + (c.merge.conflicts.length ? '، و' + c.merge.conflicts.length + ' خانة غيّرها الطرفان تُعتمد فيها قيم ' + (choice === 'cloud' ? 'السحابة' : 'هذا الجهاز') : '') + '.\nتُحفظ النسختان قبل الدمج (سجل النسخ + نسخة احتياطية). للمتابعة اكتب: دمج';
+    if ((prompt(msg) || '').trim() !== 'دمج') { ui.status.textContent = 'أُلغي. لم يتغير شيء.'; return; }
+    const wasAuto = fsAutoEnabled(); if (wasAuto) localStorage.setItem(FS_AUTO_KEY, '0');
+    try {
+      ui.status.textContent = 'نسخة احتياطية...';
+      const bk = await fsMakeBackup('الدمج', { full: current });
+      await fsSnapshotCloud(current, 'قبل الدمج', true);
+      const meta = fsMakeMeta(merged, merged, { firstTransfer: false, removed: [] });
+      await fsPushPayload(merged, meta, current, t => { ui.status.textContent = t; });
+      ui.status.textContent = 'تطابقت السحابة مع نتيجة الدمج. جارٍ تطبيقها على هذا الجهاز...';
+      if (wasAuto) localStorage.setItem(FS_AUTO_KEY, '1');
+      await fsReplaceLocal(merged, 'merge', bk.id);
+    } finally { if (wasAuto) localStorage.setItem(FS_AUTO_KEY, '1'); }
+  } catch (e) { ui.status.textContent = 'توقف الدمج: ' + e.message; }
 }
 
 // ============================================================
