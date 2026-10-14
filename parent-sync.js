@@ -936,9 +936,13 @@ async function fsSaveBaseContent(db) {
   try { if (db) await fsIdbPut({ id: 'base-content', kind: 'base', at: new Date().toISOString(), contentFp: fsContentFp(db), data: db }); } catch (_) {}
 }
 async function fsLoadBaseContent() {
+  const base = loadJSON(FS_BASE_KEY, null); if (!base) return null;
+  try { const item = await fsIdbGet('base-content'); if (item && item.contentFp === base.contentFp) return item.data; } catch (_) {}
+  // بديل: نسخة السحابة المطابقة لآخر مزامنة هذا الجهاز، من النسخ المحفوظة داخل المتصفح أو من «سجل النسخ في السحابة»
+  try { for (const x of ((await fsIdbAll()) || [])) { const db = x.row && x.row.db || x.localDb || x.data; if (db && fsContentFp(db) === base.contentFp) return db; } } catch (_) {}
   try {
-    const base = loadJSON(FS_BASE_KEY, null), item = await fsIdbGet('base-content');
-    if (base && item && item.contentFp === base.contentFp) return item.data;
+    const list = await fsListHistory(30);
+    for (const r of list) if (r.meta && r.meta.contentFp === base.contentFp) { const row = await fsFetchRow(r.id); if (row && row.db && fsContentFp(row.db) === base.contentFp) return row.db; }
   } catch (_) {}
   return null;
 }
