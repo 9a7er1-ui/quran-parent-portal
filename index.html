@@ -596,6 +596,7 @@ function bulkCourseHeader(subject,t,p,d,i){
  box.append(inp,b);th.append(box);return th;
 }
 function unifiedPair(subject,t,p,d1,d2){const wrap=e('div');wrap.className='scroll unified-course';const table=e('table'),thead=e('thead'),top=e('tr');top.append(e('th','الطالب'));const g1=e('th',d1.name);g1.colSpan=d1.count+1;g1.className='group-title';top.append(g1);const g2=e('th',d2.name);g2.colSpan=d2.count+1;g2.className='group-title group-start';top.append(g2);thead.append(top);const nums=e('tr');nums.append(e('th','الاسم'));for(let i=0;i<d1.count;i++)nums.append(bulkCourseHeader(subject,t,p,d1,i));nums.append(e('th','المجموع'));for(let i=0;i<d2.count;i++){const h=bulkCourseHeader(subject,t,p,d2,i);if(i===0)h.className='group-start';nums.append(h)}nums.append(e('th','المجموع'));thead.append(nums);table.append(thead);const body=e('tbody');for(const st of visibleStudents()){const tr=e('tr'),name=e('td');name.className='name-col';name.append(studentNameLink(st));tr.append(name);let x=0,y=0;for(let i=0;i<d1.count;i++){const v=courseValue(subject,t,p,st.id,d1.id,i);if(v!==null)x+=v;tr.append(markCell(subject,t,p,st,d1,i))}tr.append(e('td',String(x)));for(let i=0;i<d2.count;i++){const td=markCell(subject,t,p,st,d2,i);if(i===0)td.classList.add('group-start');const v=courseValue(subject,t,p,st.id,d2.id,i);if(v!==null)y+=v;tr.append(td)}tr.append(e('td',String(y)));body.append(tr)}table.append(body);wrap.append(table);return wrap}
+function unifiedGroup(subject,t,p,list){const wrap=e('div');wrap.className='scroll unified-course';const table=e('table'),thead=e('thead'),top=e('tr');top.append(e('th','الطالب'));list.forEach((d,gi)=>{const g=e('th',d.name);g.colSpan=d.count+1;g.className='group-title'+(gi?' group-start':'');top.append(g)});thead.append(top);const nums=e('tr');nums.append(e('th','الاسم'));list.forEach((d,gi)=>{for(let i=0;i<d.count;i++){const h=bulkCourseHeader(subject,t,p,d,i);if(gi&&i===0)h.classList.add('group-start');nums.append(h)}nums.append(e('th','المجموع'))});thead.append(nums);table.append(thead);const body=e('tbody');for(const st of visibleStudents()){const tr=e('tr'),name=e('td');name.className='name-col';name.append(studentNameLink(st));tr.append(name);list.forEach((d,gi)=>{let sum=0;for(let i=0;i<d.count;i++){const td=markCell(subject,t,p,st,d,i);if(gi&&i===0)td.classList.add('group-start');const v=courseValue(subject,t,p,st.id,d.id,i);if(v!==null)sum+=v;tr.append(td)}tr.append(e('td',String(sum)))});body.append(tr)}table.append(body);wrap.append(table);return wrap}
 function singleCourse(subject,t,p,d){
  const wrap=e('div');wrap.className='scroll unified-course';
  const table=e('table'),thead=e('thead'),top=e('tr');
@@ -631,19 +632,18 @@ function coursework(){
  const m=Object.fromEntries(defs.map(d=>[d.id,d]));
  const guidePair=(d1,d2)=>{const x=e('div',courseGuideText(d1)+'   —   '+courseGuideText(d2));x.className='course-guide';host.append(x);host.append(unifiedPair(subject,t,p,d1,d2))};
  const guideSingle=d=>{const x=e('div',courseGuideText(d));x.className='course-guide';host.append(x);host.append(singleCourse(subject,t,p,d))};
+ const guideGroup=list=>{const x=e('div',list.map(courseGuideText).join('   —   '));x.className='course-guide';host.append(x);host.append(unifiedGroup(subject,t,p,list))};
  if(subject==='islamic'){
   guidePair(m.participation,m.homework);
   guidePair(m.interaction,m.tests);
-  guidePair(m.viol2,m.vSleep);guidePair(m.vTalk,m.vFood);guidePair(m.vAnnoy,m.vTamper);
+  guideGroup([m.viol2,m.vSleep,m.vTalk]);guideGroup([m.vFood,m.vAnnoy,m.vTamper]);
  }else if(subject==='tajweed'){
   guidePair(m.participation,m.homework);
-  guidePair(m.practical,m.enrichment);
-  guideSingle(m.tests);
-  guidePair(m.viol2,m.vSleep);guidePair(m.vTalk,m.vFood);guidePair(m.vAnnoy,m.vTamper);
+  guideGroup([m.practical,m.enrichment,m.tests]);
+  guideGroup([m.viol2,m.vSleep,m.vTalk]);guideGroup([m.vFood,m.vAnnoy,m.vTamper]);
  }else if(subject==='life'){
   guidePair(m.participation,m.homework);
-  guidePair(m.research,m.activities);
-  guideSingle(m.tests);
+  guideGroup([m.research,m.activities,m.tests]);
  }
  hideCourseDeleteButtons();
 }
@@ -713,4 +713,4 @@ Object.defineProperty(window.__app,'db',{get:()=>db});
 
 window.dispatchEvent(new Event('app-ready'));
 })();
-</script><script src="./parent-sync.js?v=20261010-fullsync-stage3d"></script></html>
+</script><script src="./parent-sync.js?v=20261010-fullsync-stage3e"></script></html>
