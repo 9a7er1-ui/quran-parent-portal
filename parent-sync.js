@@ -2010,6 +2010,83 @@ async function awResolveSent() {
   } catch (_) {}
 }
 
+
+// ============================================================
+// بطاقات ربط أولياء الأمور للطباعة (8 بطاقات في الصفحة)
+// تُنشأ رموز جديدة لكل طالب (رمز لكل نسخة)، بصلاحية أطول تناسب التوزيع الورقي، ويُرسم الباركود داخل الجهاز.
+// ============================================================
+function lcRender(host) {
+  const app = window.__app; if (!app || !host) return;
+  const box = document.createElement('div'); box.className = 'summary-card';
+  box.innerHTML = `<details id="lcDetails"><summary><b>بطاقات ربط أولياء الأمور للطباعة (باركود ورمز لكل طالب)</b></summary>
+    <p class="muted">تُنشأ رموز ربط جديدة وتُطبع في صفحات، كل صفحة 8 بطاقات، تقصّها وتوزعها على الطلاب. احفظها PDF من نافذة الطباعة باختيار «حفظ بتنسيق PDF».</p>
+    <label>الشعبة <select id="lcSec"><option value="">الكل</option>${app.db.sections.map(s => `<option>${escapeHtml(s)}</option>`).join('')}</select></label>
+    <label>الطلاب <select id="lcWho"><option value="unlinked">من ليس له ولي أمر مرتبط فقط</option><option value="all">جميع الطلاب</option></select></label>
+    <label>عدد البطاقات لكل طالب <select id="lcCopies"><option value="1">1</option><option value="2">2 (الأب والأم)</option><option value="3">3</option></select></label>
+    <label>صلاحية الرمز <select id="lcDays"><option value="7">7 أيام</option><option value="14" selected>14 يومًا</option><option value="30">30 يومًا</option></select></label>
+    <button id="lcGo" type="button">إنشاء البطاقات وطباعتها</button>
+    <p id="lcStatus" class="muted"></p></details>`;
+  host.appendChild(box);
+  box.querySelector('#lcGo').onclick = () => lcGenerate(box);
+}
+
+async function lcGenerate(box) {
+  const st = box.querySelector('#lcStatus');
+  const sec = box.querySelector('#lcSec').value, who = box.querySelector('#lcWho').value;
+  const copies = +box.querySelector('#lcCopies').value, days = +box.querySelector('#lcDays').value;
+  const links = await wnLoadLinks();
+  if (!links) { st.textContent = 'سجّل الدخول من «بوابة أولياء الأمور» أولًا.'; return; }
+  let list = uniqueStudents().filter(s => !sec || s.section === sec);
+  if (who === 'unlinked') list = list.filter(s => !(links.get(s.key) || []).length);
+  if (!list.length) { st.textContent = 'لا يوجد طلاب بهذا الاختيار.'; return; }
+  if (!confirm('سيُنشأ ' + (list.length * copies) + ' رمز ربط جديد (' + list.length + ' طالب × ' + copies + ')، صالحة ' + days + ' يومًا، كل رمز لحساب واحد. متابعة؟')) return;
+  const win = window.open('', '_blank'); // تُفتح قبل الانتظار حتى لا يمنعها المتصفح
+  if (!win) { st.textContent = 'اسمح بالنوافذ المنبثقة لهذا الموقع ثم أعد المحاولة.'; return; }
+  win.document.write('<p style="font:18px Tahoma;direction:rtl;padding:20px">جارٍ إنشاء البطاقات...</p>');
+  const cards = []; let fail = 0;
+  for (const s of list) {
+    for (let c = 0; c < copies; c++) {
+      st.textContent = 'جارٍ إنشاء الرموز... ' + (cards.length + fail + 1) + ' من ' + (list.length * copies);
+      const r = await createFreshLinkCode(s, days * 24);
+      if (r.error) { fail++; continue; }
+      const url = PARENT_PORTAL_URL + '?code=' + encodeURIComponent(r.item.code);
+      let svg = ''; try { svg = await fsQrSvg(url); } catch (_) {}
+      cards.push({ name: s.name, section: s.section, code: r.item.code, exp: r.item.expires_at, svg, copy: copies > 1 ? (c + 1) : 0 });
+    }
+  }
+  if (!cards.length) { win.close(); st.textContent = 'تعذّر إنشاء الرموز.'; return; }
+  const fmtExp = d => new Date(d).toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' });
+  const cardHtml = x => `<div class="card">
+      <div class="top"><b>بوابة ولي الأمر</b><span>متوسطة ذي النورين</span></div>
+      <div class="mid"><div class="qr">${x.svg || ''}</div>
+        <div class="info"><div class="nm">${escapeHtml(x.name)}</div><div class="sec">${escapeHtml(x.section)}${x.copy ? ' — بطاقة ' + x.copy : ''}</div>
+        <div class="code">${escapeHtml(x.code)}</div><div class="exp">صالح حتى ${escapeHtml(fmtExp(x.exp))}</div></div></div>
+      <ol><li>امسح الباركود بكاميرا الجوال.</li><li>اختر «حساب جديد» وسجّل ببريدك، واحفظ كلمة المرور.</li><li>الرمز لحساب واحد فقط؛ لكل فرد من الأسرة بطاقة مستقلة.</li></ol>
+    </div>`;
+  const pages = [];
+  for (let i = 0; i < cards.length; i += 8) pages.push('<section class="page">' + cards.slice(i, i + 8).map(cardHtml).join('') + '</section>');
+  win.document.open();
+  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>بطاقات ربط أولياء الأمور</title><style>
+    @page{size:A4;margin:8mm}
+    *{box-sizing:border-box} body{margin:0;font-family:Tahoma,Arial,sans-serif;color:#17322b}
+    .bar{padding:10px;text-align:center;background:#eef5f1} .bar button{font:16px Tahoma;padding:8px 18px}
+    .page{width:194mm;height:281mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:0;page-break-after:always;margin:auto}
+    .page:last-child{page-break-after:auto}
+    .card{border:1px dashed #8aa79a;padding:4mm;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+    .top{display:flex;justify-content:space-between;border-bottom:1px solid #cfe0d7;padding-bottom:1.5mm;font-size:11pt}
+    .top span{color:#55705f;font-size:9pt}
+    .mid{display:flex;gap:4mm;align-items:center}
+    .qr{width:34mm;height:34mm;flex:none} .qr svg{width:100%;height:100%}
+    .info{flex:1;min-width:0} .nm{font-weight:bold;font-size:11.5pt;line-height:1.4} .sec{font-size:9.5pt;color:#55705f}
+    .code{direction:ltr;text-align:center;font:bold 15pt "Courier New",monospace;letter-spacing:2px;border:1px solid #cfe0d7;border-radius:2mm;margin-top:2mm;padding:1mm}
+    .exp{font-size:8.5pt;color:#55705f;margin-top:1mm;text-align:center}
+    ol{margin:1mm 0 0;padding-inline-start:5mm;font-size:8.5pt;line-height:1.45}
+    @media print{.bar{display:none}}
+  </style></head><body><div class="bar"><button onclick="window.print()">طباعة / حفظ PDF</button> — ${cards.length} بطاقة في ${pages.length} صفحة</div>${pages.join('')}<script>setTimeout(function(){window.print()},700)<\/script></body></html>`);
+  win.document.close();
+  st.textContent = '✓ أُنشئت ' + cards.length + ' بطاقة' + (fail ? ' — تعذّر ' + fail : '') + '. اختر «حفظ بتنسيق PDF» في نافذة الطباعة لحفظ نسخة.';
+}
+
 // ============================================================
 // المزامنة التلقائية الآمنة
 // القاعدة: نقل كامل فقط، ولا يحدث تلقائيًا إلا إذا تغيّر طرف واحد منذ آخر مزامنة:
@@ -2180,6 +2257,7 @@ async function renderParentTab(root) {
   wnRender(root.querySelector('#wnHost'));
   qpRender(root.querySelector('#wnHost'));
   awRender(root.querySelector('#wnHost'));
+  lcRender(root.querySelector('#wnHost'));
   cnRender(root.querySelector('#wnHost'));
   vnRender(root.querySelector('#wnHost'));
 
@@ -2259,12 +2337,12 @@ async function latestValidLinkCode(studentId) {
   return {item:(data&&data[0])||null};
 }
 
-async function createFreshLinkCode(st) {
+async function createFreshLinkCode(st, hours) {
   const portalEnabled=window.__app?.db?.studentSupport?.[st.key]?.portalEnabled!==false;
   const {error:upErr}=await supa.from('students_public').upsert({id:st.key,full_name:st.name,portal_enabled:portalEnabled},{onConflict:'id'});
   if(upErr) return {error:upErr};
   const code=randomLinkCode();
-  const expiresAt=new Date(Date.now()+LINK_CODE_VALID_HOURS*3600*1000).toISOString();
+  const expiresAt=new Date(Date.now()+(hours||LINK_CODE_VALID_HOURS)*3600*1000).toISOString();
   const {error}=await supa.from('link_codes').insert({code,student_id:st.key,expires_at:expiresAt});
   if(error) return {error};
   return {item:{code,expires_at:expiresAt}};
