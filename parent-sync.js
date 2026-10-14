@@ -5,6 +5,7 @@ const SUPABASE_URL = 'https://bobjfngkrepajfsmaihk.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_tlHAjfYiVXXq81ponT7E-g_fniIquBM';
 const TEACHER_EMAIL = '9a7er1@gmail.com';            // لتعبئة حقل الدخول تلقائيًا فقط؛ الصلاحية الفعلية مرتبطة بـ UID في schema.sql
 const PARENT_PORTAL_URL = 'https://9a7er1-ui.github.io/quran-parent-portal/student.html';
+const LINK_CODE_MAX_USES = 3; // الرمز الواحد يربط حتى 3 حسابات (الأب والأم والطالب)
 const LINK_CODE_VALID_HOURS = 72; // مدة صلاحية رمز الربط قبل أن ينتهي// ============================================================
 
 let supa = null;
@@ -2022,7 +2023,7 @@ function lcRender(host) {
     <p class="muted">تُنشأ رموز ربط جديدة وتُطبع في صفحات، كل صفحة 8 بطاقات، تقصّها وتوزعها على الطلاب. احفظها PDF من نافذة الطباعة باختيار «حفظ بتنسيق PDF».</p>
     <label>الشعبة <select id="lcSec"><option value="">الكل</option>${app.db.sections.map(s => `<option>${escapeHtml(s)}</option>`).join('')}</select></label>
     <label>الطلاب <select id="lcWho"><option value="unlinked">من ليس له ولي أمر مرتبط فقط</option><option value="all">جميع الطلاب</option></select></label>
-    <label>عدد البطاقات لكل طالب <select id="lcCopies"><option value="1">1</option><option value="2">2 (الأب والأم)</option><option value="3">3</option></select></label>
+    <label>عدد البطاقات لكل طالب <select id="lcCopies"><option value="1" selected>1 (بطاقة عائلية)</option><option value="2">2</option></select></label>
     <label>صلاحية الرمز <select id="lcDays"><option value="7">7 أيام</option><option value="14" selected>14 يومًا</option><option value="30">30 يومًا</option></select></label>
     <button id="lcGo" type="button">إنشاء البطاقات وطباعتها</button>
     <p id="lcStatus" class="muted"></p></details>`;
@@ -2039,7 +2040,7 @@ async function lcGenerate(box) {
   let list = uniqueStudents().filter(s => !sec || s.section === sec);
   if (who === 'unlinked') list = list.filter(s => !(links.get(s.key) || []).length);
   if (!list.length) { st.textContent = 'لا يوجد طلاب بهذا الاختيار.'; return; }
-  if (!confirm('سيُنشأ ' + (list.length * copies) + ' رمز ربط جديد (' + list.length + ' طالب × ' + copies + ')، صالحة ' + days + ' يومًا، كل رمز لحساب واحد. متابعة؟')) return;
+  if (!confirm('سيُنشأ ' + (list.length * copies) + ' رمز ربط جديد (' + list.length + ' طالب × ' + copies + ')، صالحة ' + days + ' يومًا، وكل رمز يربط حتى ' + LINK_CODE_MAX_USES + ' حسابات. متابعة؟')) return;
   const win = window.open('', '_blank'); // تُفتح قبل الانتظار حتى لا يمنعها المتصفح
   if (!win) { st.textContent = 'اسمح بالنوافذ المنبثقة لهذا الموقع ثم أعد المحاولة.'; return; }
   win.document.write('<p style="font:18px Tahoma;direction:rtl;padding:20px">جارٍ إنشاء البطاقات...</p>');
@@ -2061,7 +2062,7 @@ async function lcGenerate(box) {
       <div class="mid"><div class="qr">${x.svg || ''}</div>
         <div class="info"><div class="nm">${escapeHtml(x.name)}</div><div class="sec">${escapeHtml(x.section)}${x.copy ? ' — بطاقة ' + x.copy : ''}</div>
         <div class="code">${escapeHtml(x.code)}</div><div class="exp">صالح حتى ${escapeHtml(fmtExp(x.exp))}</div></div></div>
-      <ol><li>امسح الباركود بكاميرا الجوال.</li><li>اختر «حساب جديد» وسجّل ببريدك، واحفظ كلمة المرور.</li><li>الرمز لحساب واحد فقط؛ لكل فرد من الأسرة بطاقة مستقلة.</li></ol>
+      <ol><li>امسح الباركود بكاميرا الجوال.</li><li>اختر «حساب جديد» وسجّل ببريدك، واحفظ كلمة المرور.</li><li>البطاقة نفسها يستخدمها الأب والأم والطالب، كلٌّ ببريده الخاص (حتى ${LINK_CODE_MAX_USES} حسابات). احتفظ بها داخل الأسرة.</li></ol>
     </div>`;
   const pages = [];
   for (let i = 0; i < cards.length; i += 8) pages.push('<section class="page">' + cards.slice(i, i + 8).map(cardHtml).join('') + '</section>');
@@ -2337,13 +2338,14 @@ async function latestValidLinkCode(studentId) {
   return {item:(data&&data[0])||null};
 }
 
-async function createFreshLinkCode(st, hours) {
+async function createFreshLinkCode(st, hours, maxUses) {
   const portalEnabled=window.__app?.db?.studentSupport?.[st.key]?.portalEnabled!==false;
   const {error:upErr}=await supa.from('students_public').upsert({id:st.key,full_name:st.name,portal_enabled:portalEnabled},{onConflict:'id'});
   if(upErr) return {error:upErr};
   const code=randomLinkCode();
   const expiresAt=new Date(Date.now()+(hours||LINK_CODE_VALID_HOURS)*3600*1000).toISOString();
-  const {error}=await supa.from('link_codes').insert({code,student_id:st.key,expires_at:expiresAt});
+  let {error}=await supa.from('link_codes').insert({code,student_id:st.key,expires_at:expiresAt,max_uses:maxUses||LINK_CODE_MAX_USES});
+  if(error&&/max_uses|column/i.test(error.message||'')) ({error}=await supa.from('link_codes').insert({code,student_id:st.key,expires_at:expiresAt})); // قبل تشغيل family-codes.sql
   if(error) return {error};
   return {item:{code,expires_at:expiresAt}};
 }
@@ -2354,7 +2356,7 @@ function showLinkCodeAndQr(codeOut,item) {
   const qrSrc='https://quickchart.io/qr?size=180&margin=2&text='+encodeURIComponent(link);
   const leftMs=Math.max(0,new Date(expiresAt).getTime()-Date.now());
   const leftHours=Math.ceil(leftMs/3600000);
-  codeOut.innerHTML=`<div>الرمز: <b>${code}</b> (متبقي نحو ${leftHours} ساعة) — <a href="${link}" target="_blank" rel="noopener">رابط الدخول</a></div>
+  codeOut.innerHTML=`<div>الرمز: <b>${code}</b> (متبقي نحو ${leftHours} ساعة، ويربط حتى ${LINK_CODE_MAX_USES} حسابات: الأب والأم والطالب) — <a href="${link}" target="_blank" rel="noopener">رابط الدخول</a></div>
     <div style="margin:10px auto 3px;text-align:center">
       <img class="student-qr" src="${qrSrc}" alt="QR للطالب" width="180" height="180"
         style="display:block;width:180px;height:180px;margin:auto;background:#fff;padding:7px;border:1px solid #d7e3dd;border-radius:8px"
