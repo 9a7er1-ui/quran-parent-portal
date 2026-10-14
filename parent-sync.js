@@ -192,7 +192,7 @@ const FS_FIELD_LABELS = {
   holidays: 'الإجازات', approvals: 'الاعتمادات', actual: 'الموعد الفعلي', view: 'الكشف المعروض', max: 'الدرجة العظمى',
   sections: 'الشعب', activeSection: 'الشعبة النشطة', activeSubject: 'المادة النشطة', coursework: 'درجات المواد',
   quranShare: 'نصيب القرآن', auditLog: 'سجل التعديلات', archives: 'الأرشيف', lastBackupAt: 'آخر نسخة احتياطية',
-  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية', violationNotices: 'سجل إشعارات المخالفات', courseNotices: 'سجل رسائل المشاركات والواجبات', quranPlan: 'توزيع مقرر القرآن'
+  studentSupport: 'متابعة الطلاب', syncMarks: 'علامات المزامنة', weeklyNotices: 'سجل الرسائل الأسبوعية', violationNotices: 'سجل إشعارات المخالفات', courseNotices: 'سجل رسائل المشاركات والواجبات', quranPlan: 'توزيع مقرر القرآن', autoWeekly: 'إعدادات الإرسال الآلي'
 };
 function fsSize(v) { const t = fsType(v); return t === 'array' ? v.length : t === 'object' ? Object.keys(v).length : t === 'undefined' ? '—' : 'قيمة'; }
 
@@ -1321,6 +1321,7 @@ async function wnBuild(host) {
   const r = wnCompute(t, p, w), label = wnWeekLabel(t, p, w), tag = wnTag(t, p, w);
   if (!r.reqDays.length) { out.textContent = 'لا توجد أيام حفظ محتسبة في هذا الأسبوع (إجازة).'; return; }
   wnState.links = await wnLoadLinks();
+  if (wnState.links) await awResolveSent();
   const sent = db.weeklyNotices || {};
   const receipts = await wnLoadReceipts(Object.entries(sent).filter(([k]) => k.startsWith(tag + '|')).flatMap(([, v]) => v.ids || []));
   wnState.items = {}; wnState.week = { t, p, w, label, tag };
@@ -1419,6 +1420,7 @@ function wnReceiptState(v, receipts) {
 function wnReceiptText(v, receipts) {
   const rs = (v.ids || []).map(id => receipts.get(String(id))).filter(Boolean);
   const fmt = x => new Date(x).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
+  if (v.scheduled && !(v.ids || []).length) return '⏳ مجدولة آليًا — تُرسل ' + fmt(v.sendAfter) + (Date.parse(v.sendAfter) < Date.now() ? ' (بانتظار مهمة الخادم)' : '');
   let t = '✓ أُرسل ' + fmt(v.at);
   const ack = rs.map(r => r.acknowledged_at).filter(Boolean).sort()[0], rd = rs.map(r => r.read_at).filter(Boolean).sort()[0];
   const ackRow = rs.filter(r => r.acknowledged_at).sort((a, b) => a.acknowledged_at.localeCompare(b.acknowledged_at))[0];
@@ -1803,6 +1805,211 @@ function cnPrint() {
   win.document.write(html); win.document.close();
 }
 
+
+// ============================================================
+// التجهيز الآلي لرسائل الأسبوع يوم الخميس (القرآن الكريم)
+// عند فتح التطبيق يوم الخميس بعد الوقت المحدد (أو الجمعة والسبت إن لم يُفتح الخميس):
+// تُحسب الخطط العلاجية وخطابات الشكر ورسائل التعويض لأسبوع الخميس، وتُوضع «مجدولة» في السحابة
+// مع مهلة مراجعة. مهمة الخادم ترسلها بعد المهلة حتى لو أُغلقت الأجهزة، ما لم يلغها المعلم.
+// ============================================================
+const AW_DEFAULTS = { enabled: true, time: '15:30', reviewHours: 2 };
+function awSettings() { return Object.assign({}, AW_DEFAULTS, (window.__app.db.autoWeekly || {}).settings || {}); }
+
+function awHijri(date) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { day: 'numeric', month: 'numeric' }).formatToParts(date);
+    const d = parts.find(x => x.type === 'day'), m = parts.find(x => x.type === 'month');
+    return d && m ? Number(d.value) + '/' + Number(m.value) : '';
+  } catch (_) { return ''; }
+}
+// الأسبوع الذي يقع فيه خميس هذا الأسبوع: من تواريخ «توزيع المقرر» أولًا، وإلا من «الموعد الفعلي»
+function awTargetWeek(now) {
+  const db = window.__app.db, day = now.getDay();
+  const thu = new Date(now); thu.setDate(now.getDate() - (day >= 4 ? day - 4 : day + 3));
+  const days = db.quranPlan && db.quranPlan.days || {};
+  for (let back = 0; back <= 4; back++) {
+    const dt = new Date(thu); dt.setDate(thu.getDate() - back);
+    const h = awHijri(dt); if (!h) break;
+    const hit = Object.entries(days).find(([k, e]) => e && e.date && qpFromAr(e.date).replace(/\s+/g, '') === h && +k.split('|')[3] === 4 - back);
+    if (hit) { const [t, p, w] = hit[0].split('|').map(Number); return { t, p, w, source: 'plan' }; }
+  }
+  const a = db.actual; return { t: a.t, p: a.p, w: a.w, source: 'actual' };
+}
+function awInWindow(now, s) {
+  const day = now.getDay();
+  if (day === 5 || day === 6) return true;
+  if (day !== 4) return false;
+  const [hh, mm] = String(s.time || '15:30').split(':').map(Number);
+  return now.getHours() * 60 + now.getMinutes() >= (hh || 0) * 60 + (mm || 0);
+}
+
+async function awPrepare(force) {
+  const app = window.__app, db = app.db, s = awSettings(), now = new Date();
+  if (!s.enabled && !force) return null;
+  if (!force && !awInWindow(now, s)) return null;
+  const { t, p, w } = awTargetWeek(now), tag = wnTag(t, p, w), label = wnWeekLabel(t, p, w);
+  db.autoWeekly = db.autoWeekly || {}; db.autoWeekly.prepared = db.autoWeekly.prepared || {};
+  if (db.autoWeekly.prepared[tag] && !force) return null;
+  const links = await wnLoadLinks(); if (!links) return null; // يلزم تسجيل دخول المعلم
+  const r = wnCompute(t, p, w); if (!r.reqDays.length) return null;
+  const sendAfter = new Date(Date.now() + (Number(s.reviewHours) || 2) * 3600000).toISOString();
+  const rows = [], recs = [];
+  db.weeklyNotices = db.weeklyNotices || {};
+  for (const [type, list] of [['remedial', r.remedial], ['thanks', r.thanks]]) {
+    for (const it of list) {
+      const doneKey = tag + '|' + it.uid + '|' + type;
+      if (db.weeklyNotices[doneKey]) continue;                 // أُرسل أو جُدول من قبل
+      const parents = links.get(it.uid) || []; if (!parents.length) continue;
+      const body = type === 'remedial' ? wnRemedialText(it, label) : wnThanksText(it, label);
+      for (const pu of parents) rows.push({ week_tag: tag, kind: type, student_id: it.uid, parent_uid: pu, body, send_after: sendAfter });
+      const rec = { at: new Date().toISOString(), type, ids: [], scheduled: true, sendAfter, schedTag: tag };
+      if (type === 'remedial') rec.weak = (it.days || []).filter(d => d.abs || (d.v !== null && d.v <= WN_WEAK_MAX)).map(d => ({ k: d.k, v: d.abs ? 'abs' : d.v, passage: d.passage || '', day: WN_DAYS[d.d] }));
+      recs.push([doneKey, rec]);
+    }
+  }
+  for (const it of wnMakeups()) {
+    const parents = links.get(it.uid) || []; if (!parents.length) continue;
+    const body = wnMakeupText(it);
+    for (const pu of parents) rows.push({ week_tag: tag, kind: 'makeup:' + it.recKey, student_id: it.uid, parent_uid: pu, body, send_after: sendAfter });
+    recs.push([it.recKey + '|makeup|' + Date.now(), { at: new Date().toISOString(), type: 'makeup', ids: [], scheduled: true, sendAfter, schedTag: tag, makeupOf: it.recKey, keys: it.improved.map(m => m.k) }]);
+  }
+  if (rows.length) {
+    const { error } = await supa.from('scheduled_notices').upsert(rows, { onConflict: 'week_tag,kind,student_id,parent_uid', ignoreDuplicates: true });
+    if (error) { fsBadge('تعذّر تجهيز رسائل الأسبوع آليًا: ' + error.message, 'err'); return null; }
+  }
+  for (const [k, rec] of recs) {
+    db.weeklyNotices[k] = rec;
+    if (rec.type === 'makeup') { const src = db.weeklyNotices[rec.makeupOf]; if (src) src.improvedSent = [...new Set([...(src.improvedSent || []), ...rec.keys])]; }
+  }
+  db.autoWeekly.prepared[tag] = { at: new Date().toISOString(), sendAfter, count: recs.length, messages: rows.length, incomplete: r.incomplete.length, label };
+  app.save();
+  return db.autoWeekly.prepared[tag];
+}
+
+// لا يُجهّز إلا جهاز متزامن مع السحابة، ثم يرفع فورًا؛ فيستقبل الجهاز الآخر علامة «جُهّز» ولا يكرر
+async function awSynced() {
+  if (!fsAutoEnabled()) return true;
+  try {
+    const base = loadJSON(FS_BASE_KEY, null), local = fsReadStoredDb();
+    if (!base || !local || fsContentFp(local) !== base.contentFp) return false;
+    const row = await fsFetchRow(FULL_ROW_ID, 'id,meta');
+    return !!(row && row.meta && row.meta.contentFp === base.contentFp);
+  } catch (_) { return false; }
+}
+async function awCheck() {
+  try {
+    if (!window.__app || !isSupabaseConfigured() || loadJSON(FS_PENDING_KEY, null)) return;
+    const s = awSettings(); if (!s.enabled || !awInWindow(new Date(), s)) return;
+    if (!(await awSynced())) return;
+    const res = await awPrepare(false);
+    if (res) { awNotify(res); if (fsAutoEnabled()) fsAutoSchedule(1000); }
+  } catch (_) {}
+}
+function awNotify(res) {
+  const when = new Date(res.sendAfter).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+  const b = fsBanner(res.count
+    ? '<b>🔔 جُهّزت رسائل ' + escapeHtml(res.label) + ' آليًا (' + res.count + ' طالب).</b><br>ستُرسل تلقائيًا الساعة ' + when + ' ما لم تلغها. راجعها أو عدّلها من «أولياء الأمور» ← «بوابة أولياء الأمور» ← «الرسائل المجدولة».' + (res.incomplete ? '<br>لم يكتمل رصد ' + res.incomplete + ' طالب، فلم تُجهَّز لهم رسائل؛ أكمل رصدهم ثم اضغط «تجهيز الآن».' : '')
+    : '<b>لا توجد رسائل لـ' + escapeHtml(res.label) + ' تستحق الإرسال الآلي.</b>' + (res.incomplete ? ' (لم يكتمل رصد ' + res.incomplete + ' طالب.)' : ''), true);
+  setTimeout(() => b && b.remove(), 20000);
+}
+
+// ---------- لوحة الرسائل المجدولة ----------
+function awRender(host) {
+  const app = window.__app; if (!app || !host) return;
+  const s = awSettings();
+  const box = document.createElement('div'); box.className = 'summary-card';
+  box.innerHTML = `<details id="awDetails"><summary><b>الرسائل المجدولة والإرسال الآلي يوم الخميس</b></summary>
+    <label><input type="checkbox" id="awOn" ${s.enabled ? 'checked' : ''}> تجهيز رسائل القرآن الأسبوعية آليًا يوم الخميس بعد الساعة</label>
+    <input id="awTime" type="time" value="${escapeHtml(s.time)}" style="width:auto">
+    <label>مهلة المراجعة قبل الإرسال <select id="awHours">${[1, 2, 3, 4, 6].map(h => `<option value="${h}"${+s.reviewHours === h ? ' selected' : ''}>${h} ساعة</option>`).join('')}</select></label>
+    <p class="muted">تُجهَّز الخطط العلاجية وخطابات الشكر ورسائل التعويض لمن اكتمل رصده، وتُرسل بعد المهلة حتى لو كانت أجهزتك مغلقة. يمكنك تعديل أي رسالة أو إلغاؤها قبل موعدها. المشاركات والواجبات والمخالفات تبقى بيدك كما هي.</p>
+    <button id="awNow" type="button">تجهيز الآن لهذا الأسبوع</button>
+    <div id="awList" style="overflow-x:auto;margin-top:10px"></div></details>`;
+  host.appendChild(box);
+  const saveSet = () => { const db = app.db; db.autoWeekly = db.autoWeekly || {}; db.autoWeekly.settings = { enabled: box.querySelector('#awOn').checked, time: box.querySelector('#awTime').value || '15:30', reviewHours: +box.querySelector('#awHours').value }; app.save(); };
+  box.querySelector('#awOn').onchange = saveSet; box.querySelector('#awTime').onchange = saveSet; box.querySelector('#awHours').onchange = saveSet;
+  box.querySelector('#awNow').onclick = async () => { const l = box.querySelector('#awList'); l.textContent = 'جارٍ التجهيز...'; const res = await awPrepare(true); if (res) awNotify(res); else l.textContent = 'تعذّر التجهيز (تأكد من تسجيل الدخول).'; awList(box); };
+  box.querySelector('#awDetails').addEventListener('toggle', e => { if (e.target.open) awList(box); });
+}
+
+async function awList(box) {
+  const host = box.querySelector('#awList'); host.textContent = 'جارٍ التحميل...';
+  try {
+    if (!(await wnLoadLinks())) { host.textContent = 'سجّل الدخول من «بوابة أولياء الأمور» لعرض الرسائل المجدولة.'; return; }
+    const { data, error } = await supa.from('scheduled_notices').select('id,week_tag,kind,student_id,parent_uid,body,send_after,status,sent_at').order('id', { ascending: false }).limit(200);
+    if (error) throw new Error(/relation|does not exist|schema cache/i.test(error.message) ? 'ميزة الإرسال الآلي تحتاج تجهيز قاعدة البيانات أولًا (ملف auto-weekly.sql).' : error.message);
+    const db = window.__app.db, names = new Map(db.students.filter(s => (s.subject || 'quran') === 'quran').map(s => [s.studentUid, window.__app.cleanName(s.name)]));
+    host.replaceChildren();
+    const pending = (data || []).filter(r => r.status === 'pending');
+    const head = document.createElement('p');
+    head.innerHTML = pending.length ? '<b>بانتظار الإرسال: ' + pending.length + ' رسالة</b> — أقرب موعد: ' + escapeHtml(new Date(Math.min(...pending.map(r => +new Date(r.send_after)))).toLocaleString('ar-SA')) : 'لا توجد رسائل بانتظار الإرسال.';
+    host.appendChild(head);
+    if (pending.length) {
+      const all = document.createElement('div');
+      const sendNow = document.createElement('button'); sendNow.type = 'button'; sendNow.textContent = 'أرسل الآن دون انتظار';
+      const cancelAll = document.createElement('button'); cancelAll.type = 'button'; cancelAll.className = 'secondary'; cancelAll.textContent = 'إلغاء كل المجدول';
+      sendNow.onclick = async () => { if (!confirm('إرسال ' + pending.length + ' رسالة الآن؟')) return; await supa.from('scheduled_notices').update({ send_after: new Date().toISOString() }).eq('status', 'pending'); const { data: n, error: e2 } = await supa.rpc('send_scheduled_notices'); alert(e2 ? 'تعذّر: ' + e2.message : '✓ أُرسلت ' + (n || 0) + ' رسالة.'); awList(box); };
+      cancelAll.onclick = async () => { if (!confirm('إلغاء كل الرسائل المجدولة؟ يمكنك بعدها إرسالها يدويًا من التقرير الأسبوعي.')) return; await awCancel(pending); awList(box); };
+      all.append(sendNow, document.createTextNode(' '), cancelAll); host.appendChild(all);
+    }
+    const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:760px;margin-top:8px';
+    tb.innerHTML = '<thead><tr><th>الطالب</th><th>النوع</th><th>الحالة</th><th>النص</th><th></th></tr></thead><tbody></tbody>';
+    const kindName = k => k === 'remedial' ? 'خطة علاجية' : k === 'thanks' ? 'خطاب شكر' : 'شكر على التعويض';
+    const stName = { pending: '⏳ يُرسل ' + '', sent: '✓ أُرسل', cancelled: 'أُلغي', failed: 'لم يُرسل (الربط محذوف)' };
+    for (const r of (data || []).slice(0, 120)) {
+      const tr = document.createElement('tr');
+      const c = x => { const td = document.createElement('td'); if (typeof x === 'string') td.textContent = x; else td.appendChild(x); return td; };
+      const ta = document.createElement('textarea'); ta.value = r.body; ta.rows = 4; ta.style.cssText = 'width:100%;min-width:300px;font:13px Tahoma'; ta.disabled = r.status !== 'pending';
+      const act = document.createElement('div');
+      if (r.status === 'pending') {
+        const sv = document.createElement('button'); sv.type = 'button'; sv.textContent = 'حفظ التعديل';
+        sv.onclick = async () => { const { error: e3 } = await supa.from('scheduled_notices').update({ body: ta.value.trim() }).eq('id', r.id).eq('status', 'pending'); sv.textContent = e3 ? 'تعذّر' : '✓ حُفظ'; };
+        const cn = document.createElement('button'); cn.type = 'button'; cn.className = 'secondary'; cn.textContent = 'إلغاء';
+        cn.onclick = async () => { await awCancel([r]); awList(box); };
+        act.append(sv, cn);
+      }
+      tr.append(c((names.get(r.student_id) || r.student_id)), c(kindName(r.kind.split(':')[0]) + ' — ' + r.week_tag.split('|').map((v, i) => i === 2 ? 'أسبوع ' + WN_WEEKS[+v] : '').filter(Boolean).join('')), c(r.status === 'pending' ? '⏳ يُرسل ' + new Date(r.send_after).toLocaleString('ar-SA') : r.status === 'sent' ? '✓ أُرسل ' + new Date(r.sent_at).toLocaleString('ar-SA') : stName[r.status]), c(ta), c(act));
+      tb.tBodies[0].appendChild(tr);
+    }
+    host.appendChild(tb);
+  } catch (e) { host.textContent = e.message; }
+}
+async function awCancel(rows) {
+  const app = window.__app, db = app.db;
+  const ids = rows.map(r => r.id);
+  await supa.from('scheduled_notices').update({ status: 'cancelled' }).in('id', ids).eq('status', 'pending');
+  // يعود الطالب متاحًا للإرسال اليدوي من التقرير الأسبوعي
+  for (const r of rows) {
+    const kind = r.kind.split(':')[0];
+    if (kind === 'makeup') {
+      const src = r.kind.slice(7), rec = db.weeklyNotices[src];
+      for (const [k, v] of Object.entries(db.weeklyNotices)) if (v.type === 'makeup' && v.makeupOf === src && v.scheduled && !(v.ids || []).length) { if (rec) rec.improvedSent = (rec.improvedSent || []).filter(x => !(v.keys || []).includes(x)); delete db.weeklyNotices[k]; }
+    } else {
+      const k = r.week_tag + '|' + r.student_id + '|' + kind;
+      if (db.weeklyNotices[k] && db.weeklyNotices[k].scheduled && !(db.weeklyNotices[k].ids || []).length) delete db.weeklyNotices[k];
+    }
+  }
+  app.save();
+}
+// ربط الرسائل المجدولة التي أُرسلت بسجل الأسبوع لتظهر حالة القراءة والإقرار
+async function awResolveSent() {
+  const db = window.__app.db, recs = Object.entries(db.weeklyNotices || {}).filter(([, v]) => v.scheduled && !(v.ids || []).length);
+  if (!recs.length) return;
+  try {
+    const tags = [...new Set(recs.map(([, v]) => v.schedTag))];
+    const { data, error } = await supa.from('scheduled_notices').select('week_tag,kind,student_id,message_id,status').in('week_tag', tags).eq('status', 'sent');
+    if (error || !data) return;
+    let changed = false;
+    for (const [k, v] of recs) {
+      const uid = v.type === 'makeup' ? (v.makeupOf || '').split('|')[3] : k.split('|')[3];
+      const kind = v.type === 'makeup' ? 'makeup:' + v.makeupOf : v.type;
+      const ids = data.filter(r => r.week_tag === v.schedTag && r.kind === kind && r.student_id === uid && r.message_id).map(r => String(r.message_id));
+      if (ids.length) { v.ids = ids; changed = true; }
+    }
+    if (changed) window.__app.save();
+  } catch (_) {}
+}
+
 // ============================================================
 // المزامنة التلقائية الآمنة
 // القاعدة: نقل كامل فقط، ولا يحدث تلقائيًا إلا إذا تغيّر طرف واحد منذ آخر مزامنة:
@@ -1956,6 +2163,8 @@ function fsAutoStart() {
 async function fsBoot() {
   await fsPostReloadCheck();
   fsAutoStart();
+  setTimeout(awCheck, 25000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(awCheck, 8000); });
 }
 if (window.__app) fsBoot(); else window.addEventListener('app-ready', fsBoot, { once: true });
 
@@ -1970,6 +2179,7 @@ async function renderParentTab(root) {
   root.querySelector('#paSyncAll').onclick=()=>syncReports(root,students);
   wnRender(root.querySelector('#wnHost'));
   qpRender(root.querySelector('#wnHost'));
+  awRender(root.querySelector('#wnHost'));
   cnRender(root.querySelector('#wnHost'));
   vnRender(root.querySelector('#wnHost'));
 
