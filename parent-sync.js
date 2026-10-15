@@ -1213,6 +1213,24 @@ function qpDraw(box) {
   out.append(btn, st);
 }
 
+
+// ---------- مساعدات جداول الإرسال: وضوح خانة الإرسال، وتحديد الكل، وطباعة غير المرتبطين ----------
+function sendCell(c0, cb, parents, already) {
+  cb.title = 'إرسال إلى بوابة ولي الأمر';
+  if (already) { cb.style.display = 'none'; c0.appendChild(Object.assign(document.createElement('span'), { textContent: '✓', title: 'أُرسل من قبل' })); }
+  else if (parents && !parents.length) { cb.style.display = 'none'; const s = document.createElement('small'); s.textContent = 'طباعة فقط'; s.title = 'لا يوجد ولي أمر مرتبط؛ اطبع الخطاب وسلّمه للطالب'; s.style.color = '#7a5600'; c0.appendChild(s); }
+}
+function selectButtons(container) {
+  const bar = document.createElement('div'); bar.style.margin = '6px 0';
+  const all = document.createElement('button'); all.type = 'button'; all.className = 'secondary'; all.textContent = 'تحديد الكل';
+  const none = document.createElement('button'); none.type = 'button'; none.className = 'secondary'; none.textContent = 'إلغاء التحديد';
+  const boxes = () => [...container.querySelectorAll('tbody input[type=checkbox]')].filter(b => !b.disabled && b.style.display !== 'none');
+  all.onclick = () => boxes().forEach(b => { b.checked = true; }); none.onclick = () => boxes().forEach(b => { b.checked = false; });
+  const hint = document.createElement('span'); hint.className = 'muted'; hint.textContent = ' ✔ = سيُرسل إلى بوابة ولي الأمر. «طباعة فقط» = لا يوجد ولي أمر مرتبط، فاطبع خطابه.';
+  bar.append(all, document.createTextNode(' '), none, hint);
+  return bar;
+}
+
 function wnWeekLabel(t, p, w) { return 'الفصل ' + (t + 1) + ' — الفترة ' + (p + 1) + ' — الأسبوع ' + WN_WEEKS[w]; }
 function wnTag(t, p, w) { return [t, p, w].join('|'); }
 
@@ -1380,7 +1398,7 @@ async function wnBuild(host) {
     const h = document.createElement('h4'); h.textContent = title + ' (' + list.length + ')'; out.appendChild(h);
     if (!list.length) { const m = document.createElement('p'); m.className = 'muted'; m.textContent = 'لا يوجد.'; out.appendChild(m); return; }
     const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:760px';
-    tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>الطالب</th><th>النتيجة</th><th>ولي الأمر والاستلام</th><th>النص الذي سيُرسل (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+    tb.innerHTML = '<thead><tr><th style="width:70px">إرسال للبوابة</th><th>الطالب</th><th>النتيجة</th><th>ولي الأمر والاستلام</th><th>النص الذي سيُرسل (يمكن تعديله)</th></tr></thead><tbody></tbody>';
     for (const it of list) {
       const id = type + '|' + it.uid, doneKey = tag + '|' + it.uid + '|' + type, already = sent[doneKey];
       const parents = wnState.links ? (wnState.links.get(it.uid) || []) : null;
@@ -1388,7 +1406,7 @@ async function wnBuild(host) {
       const tr = document.createElement('tr');
       const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox';
       cb.checked = !already && (!parents || parents.length > 0); cb.disabled = !!already || (parents && !parents.length);
-      c0.appendChild(cb);
+      c0.appendChild(cb); sendCell(c0, cb, parents, already);
       const c1 = document.createElement('td'); c1.textContent = it.name + ' — ' + it.section;
       const c2 = document.createElement('td'); c2.textContent = it.sum + ' / ' + it.max + ' (' + Math.round(it.pct) + '٪)' + (it.abs ? ' — غياب ' + it.abs : '');
       const c3 = document.createElement('td'); c3.style.whiteSpace = 'pre-line';
@@ -1407,11 +1425,11 @@ async function wnBuild(host) {
     const pnote = document.createElement('p'); pnote.className = 'muted'; pnote.textContent = 'لمن أُرسلت له خطة علاجية ثم أعاد تسميع مقطع منها بدرجة ' + WN_MAKEUP_MIN + ' فأكثر. تظهر هنا مهما كان الأسبوع المختار.'; out.appendChild(pnote);
     if (mks.length) {
       const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:760px';
-      tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>الطالب</th><th>ما عوّضه</th><th>ولي الأمر</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+      tb.innerHTML = '<thead><tr><th style="width:70px">إرسال للبوابة</th><th>الطالب</th><th>ما عوّضه</th><th>ولي الأمر</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
       for (const it of mks) {
         const parents = wnState.links ? (wnState.links.get(it.uid) || []) : null;
         const tr = document.createElement('tr');
-        const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb);
+        const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb); sendCell(c0, cb, parents, false);
         const c1 = document.createElement('td'); c1.textContent = it.name + ' — ' + it.section;
         const c2 = document.createElement('td'); c2.textContent = it.improved.length + ' من ' + it.max + ' — ' + it.weekLabel;
         const c3 = document.createElement('td'); c3.textContent = parents === null ? 'غير معروف' : parents.length ? 'مرتبط' : 'لا يوجد ولي أمر مرتبط';
@@ -1426,8 +1444,9 @@ async function wnBuild(host) {
   const send = document.createElement('button'); send.type = 'button'; send.textContent = 'اعتماد وإرسال المحدد إلى أولياء الأمور';
   const pr = document.createElement('button'); pr.type = 'button'; pr.textContent = 'طباعة الكشفين';
   const st = document.createElement('p'); st.className = 'muted'; st.id = 'wnStatus';
-  send.onclick = () => wnSend(host, st); pr.onclick = () => wnPrint();
-  bar.append(send, document.createTextNode(' '), pr, st); out.appendChild(bar);
+  const pr2 = document.createElement('button'); pr2.type = 'button'; pr2.textContent = 'طباعة خطابات غير المرتبطين فقط';
+  send.onclick = () => wnSend(host, st); pr.onclick = () => wnPrint('all'); pr2.onclick = () => wnPrint('unlinked');
+  bar.append(send, document.createTextNode(' '), pr2, document.createTextNode(' '), pr, st); out.appendChild(selectButtons(out)); out.appendChild(bar);
 }
 
 
@@ -1496,9 +1515,10 @@ async function wnSend(host, st) {
   wnBuild(host).then(() => { const s2 = host.querySelector('#wnStatus'); if (s2) s2.textContent = st.textContent; });
 }
 
-function wnPrint() {
+function wnPrint(mode) {
   const w = wnState.week; if (!w) return;
-  const items = Object.values(wnState.items);
+  const items = Object.values(wnState.items).filter(x => mode !== 'unlinked' || (x.parents && !x.parents.length));
+  if (!items.length) { alert(mode === 'unlinked' ? 'كل الطلاب في الكشف لهم ولي أمر مرتبط.' : 'لا يوجد ما يُطبع.'); return; }
   const block = (type, title) => {
     const list = items.filter(x => x.type === type);
     if (!list.length) return '<h2>' + title + '</h2><p>لا يوجد.</p>';
@@ -1583,11 +1603,11 @@ async function vnBuild(box) {
   if (!list.length) { out.textContent = 'لا توجد مخالفات جديدة لم يُرسل عنها إشعار.'; return; }
   if (!links) { const w = document.createElement('p'); w.style.color = '#b42318'; w.textContent = 'تعذّرت معرفة أولياء الأمور المرتبطين (سجّل الدخول من «بوابة أولياء الأمور»). يمكنك المراجعة الآن والإرسال بعد تسجيل الدخول.'; out.appendChild(w); }
   const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:720px';
-  tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>الطالب</th><th>المادة</th><th>الجديد</th><th>ولي الأمر</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+  tb.innerHTML = '<thead><tr><th style="width:70px">إرسال للبوابة</th><th>الطالب</th><th>المادة</th><th>الجديد</th><th>ولي الأمر</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
   for (const it of list) {
     const parents = links ? (links.get(it.uid) || []) : null;
     const tr = document.createElement('tr');
-    const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb);
+    const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb); sendCell(c0, cb, parents, false);
     const c1 = document.createElement('td'); c1.textContent = it.name + ' — ' + it.section;
     const c2 = document.createElement('td'); c2.textContent = it.title;
     const c3 = document.createElement('td'); c3.textContent = it.freshCounts.map(([n, c]) => n + ' (' + c + ')').join('، ');
@@ -1765,11 +1785,11 @@ async function cnBuild(box) {
       if (!list.length) continue;
       any = true;
       const tb = document.createElement('table'); tb.style.cssText = 'width:100%;min-width:760px;margin-bottom:8px';
-      tb.innerHTML = '<thead><tr><th style="width:40px">إرسال</th><th>' + (type === 'remedial' ? 'خطة علاجية' : 'خطاب شكر') + '</th><th>النتيجة</th><th>ولي الأمر والاستلام</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
+      tb.innerHTML = '<thead><tr><th style="width:70px">إرسال للبوابة</th><th>' + (type === 'remedial' ? 'خطة علاجية' : 'خطاب شكر') + '</th><th>النتيجة</th><th>ولي الأمر والاستلام</th><th>النص (يمكن تعديله)</th></tr></thead><tbody></tbody>';
       for (const it of list) {
         const parents = links ? (links.get(it.uid) || []) : null;
         const tr = document.createElement('tr');
-        const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb);
+        const c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !parents || parents.length > 0; cb.disabled = !!(parents && !parents.length); c0.appendChild(cb); sendCell(c0, cb, parents, false);
         const c1 = document.createElement('td'); c1.textContent = it.name;
         const c2 = document.createElement('td'); c2.textContent = it.got + ' / ' + it.max + ' (' + Math.round(it.pct) + '٪)';
         const c3 = document.createElement('td'); c3.textContent = parents === null ? 'غير معروف' : parents.length ? 'مرتبط' : 'لا يوجد ولي أمر مرتبط (اطبع الخطاب للتوقيع)';
@@ -1792,7 +1812,9 @@ async function cnBuild(box) {
   const send = document.createElement('button'); send.type = 'button'; send.textContent = 'اعتماد وإرسال المحدد';
   const pr = document.createElement('button'); pr.type = 'button'; pr.textContent = 'طباعة الكشوف';
   const st = document.createElement('p'); st.className = 'muted'; st.id = 'cnStatus';
-  send.onclick = () => cnSend(box, st); pr.onclick = () => cnPrint();
+  const pr2 = document.createElement('button'); pr2.type = 'button'; pr2.textContent = 'طباعة خطابات غير المرتبطين فقط';
+  send.onclick = () => cnSend(box, st); pr.onclick = () => cnPrint('all'); pr2.onclick = () => cnPrint('unlinked');
+  bar.prepend(pr2); out.appendChild(selectButtons(out));
   if (!any) send.disabled = true;
   bar.append(send, document.createTextNode(' '), pr, st); out.appendChild(bar);
 }
@@ -1824,9 +1846,10 @@ async function cnSend(box, st) {
   await cnBuild(box); const s2 = box.querySelector('#cnStatus'); if (s2) s2.textContent = msg;
 }
 
-function cnPrint() {
+function cnPrint(mode) {
   const ctx = cnState.ctx; if (!ctx) return;
-  const items = Object.values(cnState.items);
+  const items = Object.values(cnState.items).filter(x => mode !== 'unlinked' || (x.parents && !x.parents.length));
+  if (!items.length) { alert(mode === 'unlinked' ? 'كل الطلاب في الكشف لهم ولي أمر مرتبط.' : 'لا يوجد ما يُطبع.'); return; }
   const html = '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>المشاركات والواجبات</title><style>body{font:14px Tahoma;margin:24px}table{border-collapse:collapse;width:100%;margin-bottom:16px}td,th{border:1px solid #999;padding:5px}.letter{page-break-inside:avoid;border:1px solid #ccc;border-radius:8px;padding:10px;margin:10px 0}pre{white-space:pre-wrap;font:14px Tahoma;margin:0}.sig{margin-top:14px;border-top:1px dashed #999;padding-top:8px}</style></head><body><h1>المشاركات والواجبات — الفصل ' + (ctx.t + 1) + ' — الفترة ' + (ctx.p + 1) + '</h1><table><tr><th>م</th><th>الطالب</th><th>المادة</th><th>النوع</th><th>النتيجة</th></tr>' +
     items.map((x, i) => '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(x.it.name) + ' — ' + escapeHtml(x.it.section) + '</td><td>' + escapeHtml(x.it.title) + '</td><td>' + (x.type === 'remedial' ? 'خطة علاجية' : 'خطاب شكر') + '</td><td>' + x.it.got + ' / ' + x.it.max + '</td></tr>').join('') + '</table>' +
     items.map(x => '<div class="letter"><pre>' + escapeHtml(x.ta.value) + '</pre><p class="sig">اسم ولي الأمر: ........................ التوقيع: ................ تاريخ الاطلاع: ..../..../........</p></div>').join('') +
