@@ -118,8 +118,9 @@ table tbody tr:hover td.name-col{background:#e8f4ed}
 .students-table-wrap{width:100%;overflow-x:auto}
 .students-table select,.students-table button{margin:0}
 .bulk-course-head{display:flex;flex-direction:column;align-items:center;gap:3px}.bulk-course-input{width:42px;min-width:0;box-sizing:border-box;padding:3px 1px;margin:0;text-align:center;direction:ltr;font-size:12px}.bulk-course-btn{padding:3px 2px;margin:0;font-size:10px;white-space:nowrap;background:#e8f3ed;color:#205348}.bulk-course-head>div:first-child{font-weight:bold}#courseBody .unified-course thead tr:nth-child(2) th:not(:first-child){height:75px;vertical-align:top}@media print{.bulk-course-input,.bulk-course-btn{display:none!important}}
+@media print{body.noor-print #noorResults{display:block!important}body.noor-print #noorResults .no-print{display:none!important}body.noor-print #report{display:none!important}body.noor-print #noorResults th:nth-last-child(-n+3),body.noor-print #noorResults td:nth-last-child(-n+3){display:none!important}}
 </style><header><h2>سجل درجات الطلاب</h2>متوسطة ذي النورين لتحفيظ القرآن الكريم — نسخة محلية تجريبية</header><section class="no-print"><b>الموعد الدراسي الفعلي:</b> <span id="actual"></span><br><b>الكشف المعروض:</b> <span id="view"></span></section><nav id="mainAreas" class="main-areas no-print" aria-label="الأقسام الرئيسية">
-<button type="button" data-area="dashboard">لوحة المتابعة</button><button type="button" data-area="students">الطلاب</button><button type="button" data-area="study">الدرجات</button>
+<button type="button" data-area="dashboard">لوحة المتابعة</button><button type="button" data-area="students">الطلاب</button><button type="button" data-area="study">رصد الدرجات</button><button type="button" data-area="results">نتائج الطلاب</button>
 <button type="button" data-area="parents">أولياء الأمور</button>
 <button type="button" data-area="data">إدارة البيانات</button>
 </nav><nav id="tabs" class="no-print"></nav><section id="scope" class="no-print"><label class="scope-control">المادة <select id="subjectSelect"><option value="quran">القرآن الكريم</option><option value="islamic">الدراسات الإسلامية</option><option value="tajweed">التجويد</option><option value="life">المهارات الحياتية</option></select></label><label class="scope-control">الشعبة <select id="sectionSelect"></select></label><span id="scopeNote" class="muted"></span></section><section id="dashboard" class="hide"><h3>لوحة المتابعة</h3>
@@ -145,7 +146,7 @@ table tbody tr:hover td.name-col{background:#e8f4ed}
 </section>
 <section id="islamicReport" class="hide"><h3>تقرير الدراسات الإسلامية فقط</h3><div id="islamicReportBody"></div></section>
 <section id="tajweedReport" class="hide"><h3>تقرير التجويد</h3><div id="tajweedReportBody"></div></section><div id="lifeGuideGlobal" class="hide">المهارات الحياتية: المشاركة والواجبات والبحوث والمشروعات والتقارير والتطبيقات والأنشطة الصفية تُرصد بعلامة ✓ فتُحتسب الدرجة الكاملة للخانة، والاختبارات فقط تُرصد بالدرجة.</div><section id="lifeReport" class="hide"><h3>تقرير المهارات الحياتية</h3><div id="lifeReportBody"></div></section>
-<section id="combined" class="hide">
+<section id="noorResults" class="hide"><h3>نتائج الطلاب — توزيع نور ٤٠ + ٦٠</h3><p class="muted">نتائج محسوبة من بيانات الرصد الأصلية. لا تُغيّر هذه الصفحة أي درجة محفوظة. لا تُعدّ اختبارات القرآن مشتملة على اختبار أُجري فعليًّا، بل تُشتق من معدل التسميع كما اتفقنا.</p><div class="no-print"><button type="button" id="noorCsv">تنزيل نتائج الطلاب CSV لبرنامج Excel</button><button type="button" id="noorPrint">طباعة النتائج</button></div><div id="noorResultsBody"></div></section><section id="combined" class="hide">
 <h3>الدراسات الإسلامية + القرآن الكريم</h3>
 <p class="muted">هذا التقرير يجمع الدراسات الإسلامية مع القرآن الكريم فقط، ليكون المجموع ١٠٠ في كل فترة.</p>
 <div id="combinedBody"></div>
@@ -211,18 +212,18 @@ else tabs={coursework:'رصد الدرجات',lifeReport:'تقرير المها�
 
 const areaKey='quran-main-area';
 let area=localStorage.getItem(areaKey)||'study';
-const groups={dashboard:['dashboard'],study:['register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment'],parents:['parentPortal','parentMessages'],data:['syncDevices','backup']};
+const groups={results:['noorResults'],dashboard:['dashboard'],study:['register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment'],parents:['parentPortal','parentMessages'],data:['syncDevices','backup']};
 document.querySelectorAll('#mainAreas button').forEach(b=>{
  b.classList.toggle('active',b.dataset.area===area);
- b.onclick=()=>{localStorage.setItem(areaKey,b.dataset.area);tab=b.dataset.area==='dashboard'?'dashboard':b.dataset.area==='students'?'students':b.dataset.area==='parents'?'parentPortal':b.dataset.area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');localStorage.setItem('quran-last-tab',tab);edit='';render()}
+ b.onclick=()=>{localStorage.setItem(areaKey,b.dataset.area);tab=b.dataset.area==='results'?'noorResults':b.dataset.area==='dashboard'?'dashboard':b.dataset.area==='students'?'students':b.dataset.area==='parents'?'parentPortal':b.dataset.area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');localStorage.setItem('quran-last-tab',tab);edit='';render()}
 });
 const allowed=groups[area]||groups.study;
 Object.keys(tabs).forEach(id=>{if(!allowed.includes(id))delete tabs[id]});
-if(area==='dashboard')tabs={dashboard:'ملخص المتابعة'};if(area==='students')tabs={students:'قائمة الطلاب'};if(!Object.prototype.hasOwnProperty.call(tabs,tab))tab=area==='dashboard'?'dashboard':area==='students'?'students':area==='parents'?'parentPortal':area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');
-for(const id of ['dashboard','register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment','syncDevices','parentPortal','parentMessages','backup'])$(id).classList.add('hide');
+if(area==='results')tabs={noorResults:'نتائج الطلاب'};if(area==='dashboard')tabs={dashboard:'ملخص المتابعة'};if(area==='students')tabs={students:'قائمة الطلاب'};if(!Object.prototype.hasOwnProperty.call(tabs,tab))tab=area==='results'?'noorResults':area==='dashboard'?'dashboard':area==='students'?'students':area==='parents'?'parentPortal':area==='data'?'syncDevices':(db.activeSubject==='quran'?'register':'coursework');
+for(const id of ['noorResults','dashboard','register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment','syncDevices','parentPortal','parentMessages','backup'])$(id).classList.add('hide');
 Object.entries(tabs).forEach(([id,name])=>{const b=e('button',name);if(tab===id)b.className='active';b.onclick=()=>{tab=id;edit='';localStorage.setItem('quran-last-tab',tab);render()};$('tabs').append(b)});
 $(tab).classList.remove('hide');
-if(tab==='dashboard')dashboard();if(tab==='register')register();if(tab==='calendar')calendar();if(tab==='students')students();if(tab==='tests')tests();if(tab==='review')review();if(tab==='report')report();if(tab==='coursework')coursework();if(tab==='combined')combinedReport();if(tab==='islamicReport')subjectReport('islamic');if(tab==='tajweedReport')subjectReport('tajweed');if(tab==='lifeReport')subjectReport('life');if(tab==='groupAssessment')groupAssessment();if(tab==='syncDevices'&&window.__cloudRender)window.__cloudRender('syncDevices');if(tab==='parentPortal'&&window.__cloudRender)window.__cloudRender('parentPortal');if(tab==='parentMessages'&&window.__cloudRender)window.__cloudRender('parentMessages');if(tab==='backup')renderArchives()}
+if(tab==='noorResults')noorResults();if(tab==='dashboard')dashboard();if(tab==='register')register();if(tab==='calendar')calendar();if(tab==='students')students();if(tab==='tests')tests();if(tab==='review')review();if(tab==='report')report();if(tab==='coursework')coursework();if(tab==='combined')combinedReport();if(tab==='islamicReport')subjectReport('islamic');if(tab==='tajweedReport')subjectReport('tajweed');if(tab==='lifeReport')subjectReport('life');if(tab==='groupAssessment')groupAssessment();if(tab==='syncDevices'&&window.__cloudRender)window.__cloudRender('syncDevices');if(tab==='parentPortal'&&window.__cloudRender)window.__cloudRender('parentPortal');if(tab==='parentMessages'&&window.__cloudRender)window.__cloudRender('parentMessages');if(tab==='backup')renderArchives()}
 
 function quranIncompleteCount(section){
  const oldSection=db.activeSection,oldSubject=db.activeSubject;db.activeSection=section;db.activeSubject='quran';
@@ -445,10 +446,9 @@ function students(){
 function report(){const body=$('reportBody');body.replaceChildren();$('max').value=db.quranShare;visibleStudents().forEach(s=>{const a=summary(db.view.t,0,s.id),b=summary(db.view.t,1,s.id),ta=db.tests[tk(db.view.t,0,s.id)],tb=db.tests[tk(db.view.t,1,s.id)],rawA=a.complete&&ta!==undefined&&a.finalScore!==null?a.finalScore+ta:null,rawB=b.complete&&tb!==undefined&&b.finalScore!==null?b.finalScore+tb:null,pa=rawA===null?null:Math.round(rawA*db.quranShare/25*100)/100,pb=rawB===null?null:Math.round(rawB*db.quranShare/25*100)/100,final=pa!==null&&pb!==null?Math.round((pa+pb)/2*100)/100:null;const tr=e('tr'),stars=starCounts(db.view.t,s.id);[s.name,(a.n+b.n)+' / '+(a.required+b.required),a.absent+b.absent,stars.distinguished,stars.early,a.pending+b.pending,a.finalScore===null&&a.score===null?'—':(a.finalScore??a.score)+(a.complete?'':' *'),ta??'—',pa??'—',b.finalScore===null&&b.score===null?'—':(b.finalScore??b.score)+(b.complete?'':' *'),tb??'—',pb??'—',final??'—'].forEach(x=>tr.append(e('td',String(x))));body.append(tr)})}
 const courseDefs={
  islamic:[
-  {id:'participation',name:'المشاركة',count:10,max:1,kind:'check',star:true},
+  {id:'noorParticipation',name:'المشاركة',count:5,max:2,kind:'check',star:true},
   {id:'homework',name:'الواجبات',count:5,max:2,kind:'check',star:true},
-  {id:'interaction',name:'التفاعل',count:5,max:2,kind:'grade',star:true},
-  {id:'tests',name:'الاختبارات',count:2,max:10,weight:20,kind:'grade',test:true},
+  {id:'noorTests',name:'الاختبارات',count:3,max:10,kind:'grade',test:true},
   {id:'viol2',name:'عدم إحضار الكتاب',count:4,max:1,violation:true},
   {id:'vSleep',name:'النوم في الحصة',count:4,max:1,violation:true},
   {id:'vTalk',name:'الحديث الجانبي المتكرر',count:4,max:1,violation:true},
@@ -477,14 +477,22 @@ const courseDefs={
   {id:'tests',name:'الاختبارات',count:2,max:10,kind:'grade',test:true}
  ]};
 function ck(subject,t,p,id,cat,i){return [subject,t,p,id,cat,i].join('|')}
-function courseValue(subject,t,p,id,cat,i){const v=db.coursework[ck(subject,t,p,id,cat,i)];return v===undefined?null:Number(v)}
+function courseValue(subject,t,p,id,cat,i){
+ const v=db.coursework[ck(subject,t,p,id,cat,i)];if(v!==undefined)return Number(v);
+ if(subject==='islamic'&&cat==='noorParticipation'&&t===0&&p===0)return 2;
+ if(subject==='islamic'&&cat==='noorTests'){
+  const a=db.coursework[ck(subject,t,p,id,'tests',0)],b=db.coursework[ck(subject,t,p,id,'tests',1)];
+  if(a!==undefined&&b!==undefined)return Math.round((Number(a)+Number(b))*50)/100;
+ }
+ return null;
+}
 function courseStarKey(subject,t,p,id,cat,i){return 'star|'+ck(subject,t,p,id,cat,i)}
 function courseCalc(subject,t,p,id){
  const defs=courseDefs[subject],parts={};let missing=0,earned=0,baseMax=0,violations=0,stars=0;
  for(const d of defs){let sum=0,filled=0;for(let i=0;i<d.count;i++){const v=courseValue(subject,t,p,id,d.id,i);if(v!==null){sum+=v;filled++}if(db.coursework[courseStarKey(subject,t,p,id,d.id,i)])stars++}
   if(d.violation){violations+=sum;parts[d.id]={sum,filled,max:d.count};continue}
   if(filled<d.count)missing+=d.count-filled;const rawMax=d.count*d.max,weighted=d.weight??rawMax;earned+=rawMax?sum/rawMax*weighted:0;baseMax+=weighted;parts[d.id]={sum,filled,max:rawMax,weighted}}
- const deduction=Math.min(5,Math.floor(violations/2)),net=Math.max(0,earned-deduction),target=subject==='islamic'?100-db.quranShare:100,scaled=baseMax?Math.round(net/baseMax*target*100)/100:0;
+ const deduction=Math.min(5,Math.floor(violations/2)),net=Math.max(0,earned-deduction),target=subject==='islamic'?50:100,scaled=baseMax?Math.round(net/baseMax*target*100)/100:0;
  return{parts,missing,violations,deduction,raw:Math.round(net*100)/100,baseMax,target,scaled,complete:missing===0,stars}
 }
 
@@ -573,7 +581,7 @@ function courseArrowKey(ev){
 }
 /* ===== نهاية التنقل بالأسهم ===== */
 
-function markCell(subject,t,p,st,d,i){const td=e('td'),stack=e('div');stack.className='mark-stack';const k=ck(subject,t,p,st.id,d.id,i),sk=courseStarKey(subject,t,p,st.id,d.id,i),v=db.coursework[k],refresh=()=>{save();coursework()},clear=()=>{delete db.coursework[k];delete db.coursework[sk];refresh()};if(d.violation){const x=e('button',v===1?'✕':'—');x.type='button';x.className='mark-btn mark-x';x.onkeydown=courseArrowKey;x.onclick=()=>{if(v===1)delete db.coursework[k];else db.coursework[k]=1;refresh()};stack.append(x);td.append(stack);return td}if(d.kind==='check'){const checked=Number(v)>0,x=e('button',checked?'✓':'—');x.type='button';x.className='mark-btn';x.onkeydown=courseArrowKey;x.onclick=()=>{if(checked)delete db.coursework[k];else db.coursework[k]=d.max;refresh()};stack.append(x)}else{const inp=e('input');inp.className='direct-grade';inp.onkeydown=courseArrowKey;inp.inputMode='decimal';inp.value=v??'';inp.placeholder='—';inp.onchange=()=>{const z=normal(inp.value.trim());if(z===''){clear();return}const n=Number(z);if(!Number.isFinite(n)||n<0||n>d.max){inp.value=v??'';return}db.coursework[k]=n;refresh()};if(d.max<=9)inp.oninput=()=>{const z=normal(inp.value).trim();if(!/^[0-9]$/.test(z)||Number(z)>d.max)return;const g=courseGradeGrid();let r=-1,c=-1;for(let i=0;i<g.length;i++){const j=g[i].indexOf(inp);if(j>=0){r=i;c=j;break}}const commit=inp.onchange;inp.onchange=null;inp.oninput=null;commit();if(r>=0)setTimeout(()=>{const ng=courseGradeGrid();for(let rr=r+1;rr<ng.length;rr++){const t2=ng[rr]?.[c];if(t2){__focusAndSelect(t2);break}}},0)};stack.append(inp)}if(v!==undefined){const acts=e('div');acts.className='mark-actions';const del=e('button','ح');del.type='button';del.className='mark-action mark-del';del.onclick=clear;acts.append(del);if(d.star&&!d.test){const star=e('button','★');star.type='button';star.className='mark-action mark-star'+(db.coursework[sk]?' on':'');star.onclick=()=>{db.coursework[sk]=!db.coursework[sk];refresh()};acts.append(star)}stack.append(acts)}td.append(stack);return td}
+function markCell(subject,t,p,st,d,i){const td=e('td'),stack=e('div');stack.className='mark-stack';const k=ck(subject,t,p,st.id,d.id,i),sk=courseStarKey(subject,t,p,st.id,d.id,i),v=courseValue(subject,t,p,st.id,d.id,i),refresh=()=>{save();coursework()},clear=()=>{delete db.coursework[k];delete db.coursework[sk];refresh()};if(d.violation){const x=e('button',v===1?'✕':'—');x.type='button';x.className='mark-btn mark-x';x.onkeydown=courseArrowKey;x.onclick=()=>{if(v===1)delete db.coursework[k];else db.coursework[k]=1;refresh()};stack.append(x);td.append(stack);return td}if(d.kind==='check'){const checked=Number(v)>0,x=e('button',checked?'✓':'—');x.type='button';x.className='mark-btn';x.onkeydown=courseArrowKey;x.onclick=()=>{if(checked)delete db.coursework[k];else db.coursework[k]=d.max;refresh()};stack.append(x)}else{const inp=e('input');inp.className='direct-grade';inp.onkeydown=courseArrowKey;inp.inputMode='decimal';inp.value=v??'';inp.placeholder='—';inp.onchange=()=>{const z=normal(inp.value.trim());if(z===''){clear();return}const n=Number(z);if(!Number.isFinite(n)||n<0||n>d.max){inp.value=v??'';return}db.coursework[k]=n;refresh()};if(d.max<=9)inp.oninput=()=>{const z=normal(inp.value).trim();if(!/^[0-9]$/.test(z)||Number(z)>d.max)return;const g=courseGradeGrid();let r=-1,c=-1;for(let i=0;i<g.length;i++){const j=g[i].indexOf(inp);if(j>=0){r=i;c=j;break}}const commit=inp.onchange;inp.onchange=null;inp.oninput=null;commit();if(r>=0)setTimeout(()=>{const ng=courseGradeGrid();for(let rr=r+1;rr<ng.length;rr++){const t2=ng[rr]?.[c];if(t2){__focusAndSelect(t2);break}}},0)};stack.append(inp)}if(v!==undefined){const acts=e('div');acts.className='mark-actions';const del=e('button','ح');del.type='button';del.className='mark-action mark-del';del.onclick=clear;acts.append(del);if(d.star&&!d.test){const star=e('button','★');star.type='button';star.className='mark-action mark-star'+(db.coursework[sk]?' on':'');star.onclick=()=>{db.coursework[sk]=!db.coursework[sk];refresh()};acts.append(star)}stack.append(acts)}td.append(stack);return td}
 function courseGuideText(d){return d.violation?d.name+': كل مخالفتين يُحسم درجة واحدة.':d.kind==='check'?d.name+': كل علامة ✓ = '+d.max+' درجة.':d.name+': الدرجة الكاملة لكل خانة '+d.max+' درجات.'}
 function bulkCourseHeader(subject,t,p,d,i){
  const th=e('th'),box=e('div');box.className='bulk-course-head';
@@ -625,7 +633,7 @@ function hideCourseDeleteButtons(){
 }
 function coursework(){
  const subject=db.activeSubject;if(subject==='quran')return;const {t,p}=db.view,defs=courseDefs[subject],host=$('courseBody');
- $('courseTitle').textContent='رصد درجات '+subjectNames[subject]+' — '+db.activeSection;$('courseNote').textContent='';host.replaceChildren();
+ $('courseTitle').textContent='رصد درجات '+subjectNames[subject]+' — '+db.activeSection;$('courseNote').textContent=subject==='islamic'?'التوزيع الجديد: المشاركة ١٠، الواجبات ١٠، الاختبارات الثلاثة ٣٠، المجموع ٥٠. تُحتسب المشاركة كاملة تلقائيًّا في الفصل الأول والفترة الأولى. درجات الاختبارات الثلاثة مشتقة من مجموع الاختبارين القديمين ما لم تُعدَّل، دون حذف الدرجات القديمة. التفاعل القديم محفوظ ولا يدخل في المجموع.':'';host.replaceChildren();
  const legacy=Object.keys(db.coursework||{}).filter(k=>{const bits=k.split('|');if(bits[0]!==subject||bits[1]!==String(t)||bits[2]!==String(p)||bits.length!==6)return false;const d=defs.find(x=>x.id===bits[4]);return d&&Number(bits[5])>=d.count;});
  if(legacy.length){const note=e('p','تنبيه: توجد '+legacy.length+' خانة قديمة محفوظة خارج التقسيم الجديد في هذه المادة والفترة. لم تُحذف، لكنها لا تدخل في مجموع التقسيم الجديد. احتفظ بنسخة احتياطية قبل اعتماد أي تحويل للدرجات القديمة.');note.className='course-guide';note.style.color='#a34417';host.append(note)}
 
@@ -634,8 +642,8 @@ function coursework(){
  const guideSingle=d=>{const x=e('div',courseGuideText(d));x.className='course-guide';host.append(x);host.append(singleCourse(subject,t,p,d))};
  const guideGroup=list=>{const x=e('div',list.map(courseGuideText).join('   —   '));x.className='course-guide';host.append(x);host.append(unifiedGroup(subject,t,p,list))};
  if(subject==='islamic'){
-  guidePair(m.participation,m.homework);
-  guidePair(m.interaction,m.tests);
+  guidePair(m.noorParticipation,m.homework);
+  guideSingle(m.noorTests);
   guideGroup([m.viol2,m.vSleep,m.vTalk]);guideGroup([m.vFood,m.vAnnoy,m.vTamper]);
  }else if(subject==='tajweed'){
   guidePair(m.participation,m.homework);
@@ -670,12 +678,46 @@ function subjectReport(subject){
  wrap.append(table);host.append(wrap)
 }
 function quranPeriodScoreForStudent(t,p,id){const r=summary(t,p,id),test=db.tests[tk(t,p,id)];if(!r.complete||test===undefined||r.finalScore===null)return null;return Math.round((r.finalScore+test)*db.quranShare/25*100)/100}
+function noorRound(n){return Math.round((n+Number.EPSILON)*100)/100}
+function noorQuranDaily(t,p,student){if(!student)return null;let sum=0,count=0;
+ for(let w=0;w<7;w++)for(let d=0;d<5;d++){
+  if(testDay(w,d)||holiday(t,p,w,d))continue;
+  const k=key(t,p,w,d,student.id),v=db.grades[k];
+  if(db.absences[k]){count++;continue}
+  if(v&&Number.isFinite(Number(v.value))){sum+=Number(v.value);count++}
+ }
+ return count?noorRound(Math.min(20,Math.max(0,sum/count/7*20))):null;
+}
+function noorRow(t,p,q,i){
+ const daily=noorQuranDaily(t,p,q),c=i?courseCalc('islamic',t,p,i.id):null;
+ const part=c?.parts.noorParticipation,home=c?.parts.homework,tests=c?.parts.noorTests;
+ const participation=part?.sum??null,homework=home?.sum??null,islamicTests=tests?.sum??null;
+ const qTests=daily===null?null:noorRound(daily*1.5);
+ const continuous=daily===null||!c?null:noorRound(daily+participation+homework-c.deduction);
+ const exams=qTests===null||!c?null:noorRound(qTests+islamicTests);
+ const total=continuous===null||exams===null?null:noorRound(continuous+exams);
+ const complete=!!(q&&i&&daily!==null&&c.complete);
+ return{daily,participation,homework,qTests,islamicTests,continuous,exams,total,complete,violations:c?.violations??null,deduction:c?.deduction??null};
+}
+function noorResults(){
+ const host=$('noorResultsBody');host.replaceChildren();const t=db.view.t,p=db.view.p;
+ const q=subjectStudents('quran'),isl=subjectStudents('islamic');
+ const rows=q.map(st=>{const i=isl.find(x=>x.studentUid===st.studentUid)||isl.find(x=>cleanName(x.name)===cleanName(st.name));return{name:st.name,...noorRow(t,p,st,i)}});
+ const note=e('div','الفصل '+(t+1)+'، الفترة '+(p+1)+'، الشعبة '+db.activeSection+' — الطلاب: '+rows.length+'، المستوفون لخانات الرصد: '+rows.filter(x=>x.complete).length+'. تُعرض النتائج غير المكتملة للمراجعة، ولا تُعدّ نهائية.');note.className='summary-card';host.append(note);
+ const wrap=e('div');wrap.className='report-scroll';const table=e('table');table.className='group-report report-table';const hdr=e('tr');
+ const heads=['الطالب','تسميع القرآن /٢٠','المشاركة /١٠','الواجبات /١٠','الأعمال المستمرة /٤٠','اختبارات القرآن /٣٠','اختبارات الإسلامية /٣٠','الاختبارات /٦٠','المجموع /١٠٠','مخالفات','خصم','حالة الرصد'];heads.forEach(x=>hdr.append(e('th',x)));table.append(hdr);
+ for(const r of rows){const tr=e('tr');[r.name,r.daily??'—',r.participation??'—',r.homework??'—',r.continuous??'—',r.qTests??'—',r.islamicTests??'—',r.exams??'—',r.total??'—',r.violations??'—',r.deduction??'—',r.complete?'مكتمل حسابيًّا':'غير مكتمل'].forEach(v=>tr.append(e('td',String(v))));table.append(tr)}
+ wrap.append(table);host.append(wrap);
+ $('noorCsv').onclick=()=>{const lines=[heads,...rows.map(r=>[r.name,r.daily,r.participation,r.homework,r.continuous,r.qTests,r.islamicTests,r.exams,r.total,'','',''])].map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';'));download('نتائج-نور-الفصل-'+(t+1)+'-الفترة-'+(p+1)+'.csv','\ufeffsep=;\r\n'+lines.join('\r\n'),'text/csv;charset=utf-8')};
+ $('noorPrint').onclick=()=>{document.body.classList.add('noor-print');window.print();document.body.classList.remove('noor-print')};
+}
+
 function combinedReport(){
- const host=$('combinedBody');host.replaceChildren();const t=db.view.t,qStudents=subjectStudents('quran'),iStudents=subjectStudents('islamic'),names=[...new Set([...qStudents,...iStudents].map(s=>cleanName(s.name)))],find=(arr,name)=>arr.find(s=>cleanName(s.name)===name);
- const note=e('div');note.className='summary-card';note.textContent='القرآن '+db.quranShare+' + الدراسات الإسلامية '+(100-db.quranShare)+' = ١٠٠ في كل فترة. تظهر درجة الإسلامية المرصودة حاليًا، أما مجموع الفترة /١٠٠ فلا يظهر إلا بعد اكتمال واعتماد القرآن واكتمال خانات الإسلامية. التجويد لا يدخل في هذا التقرير.';host.append(note);
+ const host=$('combinedBody');host.replaceChildren();const t=db.view.t,q=subjectStudents('quran'),isl=subjectStudents('islamic');
+ const note=e('div','القرآن الكريم /٥٠ + الدراسات الإسلامية /٥٠ = ١٠٠ لكل فترة. الأعمال المستمرة /٤٠ والاختبارات /٦٠. الدرجات غير المكتملة تُعرض للمراجعة.');note.className='summary-card';host.append(note);
  const wrap=e('div');wrap.className='report-scroll';const table=e('table');table.className='group-report report-table';const h=e('tr');
- ['الطالب','القرآن الأولى','الإسلامية الأولى','مجموع الأولى /١٠٠','القرآن الثانية','الإسلامية الثانية','مجموع الثانية /١٠٠','متوسط الفصل /١٠٠'].forEach(x=>h.append(e('th',x)));table.append(h);
- for(const name of names){const q=find(qStudents,name),i=find(iStudents,name),q1=q?quranPeriodScoreForStudent(t,0,q.id):null,q2=q?quranPeriodScoreForStudent(t,1,q.id):null,c1=i?courseCalc('islamic',t,0,i.id):null,c2=i?courseCalc('islamic',t,1,i.id):null,h1=i?courseHasAcademicData('islamic',t,0,i.id):false,h2=i?courseHasAcademicData('islamic',t,1,i.id):false,i1=c1&&h1?c1.scaled:null,i2=c2&&h2?c2.scaled:null,m1=q1!==null&&c1&&c1.complete&&i1!==null?Math.round((q1+i1)*100)/100:null,m2=q2!==null&&c2&&c2.complete&&i2!==null?Math.round((q2+i2)*100)/100:null,avg=m1!==null&&m2!==null?Math.round((m1+m2)/2*100)/100:null,tr=e('tr');[name,q1??'—',i1??'—',m1??'—',q2??'—',i2??'—',m2??'—',avg??'—'].forEach(v=>tr.append(e('td',String(v))));table.append(tr)}
+ ['الطالب','مستمرة الأولى /٤٠','اختبارات الأولى /٦٠','مجموع الأولى /١٠٠','مستمرة الثانية /٤٠','اختبارات الثانية /٦٠','مجموع الثانية /١٠٠','متوسط الفصل /١٠٠'].forEach(x=>h.append(e('th',x)));table.append(h);
+ for(const st of q){const i=isl.find(x=>x.studentUid===st.studentUid)||isl.find(x=>cleanName(x.name)===cleanName(st.name));const a=noorRow(t,0,st,i),b=noorRow(t,1,st,i),avg=a.complete&&b.complete?noorRound((a.total+b.total)/2):null;const tr=e('tr');[st.name,a.continuous??'—',a.exams??'—',a.total??'—',b.continuous??'—',b.exams??'—',b.total??'—',avg??'—'].forEach(x=>tr.append(e('td',String(x))));table.append(tr)}
  wrap.append(table);host.append(wrap)
 }
 function download(filename,content,type){try{const url=URL.createObjectURL(new Blob([content],{type})),a=e('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);say('طُلب تنزيل الملف؛ تحقق من مجلد التنزيلات.')}catch(err){say('تعذّر التنزيل: '+err.message)}}// Import names locally: OOXML ZIP (xlsx/docx), CSV and UTF-8 text; no network libraries.
@@ -696,7 +738,7 @@ $('archiveYear').onclick=()=>{const label=prompt('اكتب اسم الأرشيف
  if(saved){
    tab=saved;
    if(saved==='students')localStorage.setItem('quran-main-area','students');else if(['parentPortal','parentMessages'].includes(saved))localStorage.setItem('quran-main-area','parents');
-   else if(['syncDevices','backup'].includes(saved))localStorage.setItem('quran-main-area','data');
+   else if(saved==='noorResults')localStorage.setItem('quran-main-area','results');else if(['syncDevices','backup'].includes(saved))localStorage.setItem('quran-main-area','data');
    else localStorage.setItem('quran-main-area','study');
  }
 }catch(_){}
