@@ -119,6 +119,7 @@ table tbody tr:hover td.name-col{background:#e8f4ed}
 .students-table select,.students-table button{margin:0}
 .bulk-course-head{display:flex;flex-direction:column;align-items:center;gap:3px}.bulk-course-input{width:42px;min-width:0;box-sizing:border-box;padding:3px 1px;margin:0;text-align:center;direction:ltr;font-size:12px}.bulk-course-btn{padding:3px 2px;margin:0;font-size:10px;white-space:nowrap;background:#e8f3ed;color:#205348}.bulk-course-head>div:first-child{font-weight:bold}#courseBody .unified-course thead tr:nth-child(2) th:not(:first-child){height:75px;vertical-align:top}@media print{.bulk-course-input,.bulk-course-btn{display:none!important}}
 .noor-view-switch{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.noor-view-switch button{font-weight:700;padding:9px 20px}.noor-view-switch button.active{background:#205348;color:#fff;border-color:#205348}@media print{body.noor-print #noorResults{display:block!important}body.noor-print #noorResults .no-print{display:none!important}body.noor-print #report{display:none!important}body.noor-print #noorResults .noor-screen-only{display:none!important}}
+.noor-filters{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:12px 0}.noor-filters label{display:inline-flex;align-items:center;gap:8px;font-weight:600}.noor-filters select{min-width:200px;max-width:100%}@media(max-width:600px){.noor-filters label{width:100%;justify-content:space-between}.noor-filters select{min-width:0;flex:1}}
 </style><header><h2>سجل درجات الطلاب</h2>متوسطة ذي النورين لتحفيظ القرآن الكريم — نسخة محلية تجريبية</header><section class="no-print"><b>الموعد الدراسي الفعلي:</b> <span id="actual"></span><br><b>الكشف المعروض:</b> <span id="view"></span></section><nav id="mainAreas" class="main-areas no-print" aria-label="الأقسام الرئيسية">
 <button type="button" data-area="study">رصد الدرجات</button><button type="button" data-area="results">نتائج الطلاب</button><button type="button" data-area="dashboard">لوحة المتابعة</button><button type="button" data-area="students">الطلاب</button>
 <button type="button" data-area="parents">أولياء الأمور</button>
@@ -146,7 +147,7 @@ table tbody tr:hover td.name-col{background:#e8f4ed}
 </section>
 <section id="islamicReport" class="hide"><h3>تقرير الدراسات الإسلامية فقط</h3><div id="islamicReportBody"></div></section>
 <section id="tajweedReport" class="hide"><h3>تقرير التجويد</h3><div id="tajweedReportBody"></div></section><div id="lifeGuideGlobal" class="hide">المهارات الحياتية: المشاركة والواجبات والبحوث والمشروعات والتقارير والتطبيقات والأنشطة الصفية تُرصد بعلامة ✓ فتُحتسب الدرجة الكاملة للخانة، والاختبارات فقط تُرصد بالدرجة.</div><section id="lifeReport" class="hide"><h3>تقرير المهارات الحياتية</h3><div id="lifeReportBody"></div></section>
-<section id="noorResults" class="hide"><h3>نتائج الطلاب — توزيع نور ٤٠ + ٦٠</h3><p class="muted">نتائج محسوبة من بيانات الرصد الأصلية. لا تُغيّر هذه الصفحة أي درجة محفوظة. لا تُعدّ اختبارات القرآن مشتملة على اختبار أُجري فعليًّا، بل تُشتق من معدل التسميع كما اتفقنا.</p><div class="no-print" style="margin:12px 0"><label for="noorSubject">المادة <select id="noorSubject"><option value="combined">القرآن الكريم + الدراسات الإسلامية</option><option value="tajweed">التجويد</option><option value="life">المهارات الحياتية</option></select></label></div><div class="no-print noor-view-switch" role="group" aria-label="طريقة عرض نتائج الطلاب"><button type="button" id="noorDetailed" class="active" aria-pressed="true">الكشف الموزّع</button><button type="button" id="noorCompact" aria-pressed="false">الكشف المختصر</button></div><div class="no-print"><button type="button" id="noorCsv">تنزيل نتائج الطلاب CSV لبرنامج Excel</button><button type="button" id="noorPrint">طباعة النتائج</button></div><div id="noorResultsBody"></div></section><section id="combined" class="hide">
+<section id="noorResults" class="hide"><h3>نتائج الطلاب — توزيع نور ٤٠ + ٦٠</h3><p class="muted">نتائج محسوبة من بيانات الرصد الأصلية. لا تُغيّر هذه الصفحة أي درجة محفوظة. لا تُعدّ اختبارات القرآن مشتملة على اختبار أُجري فعليًّا، بل تُشتق من معدل التسميع كما اتفقنا.</p><div class="no-print noor-filters"><label for="noorSubject">المادة <select id="noorSubject"><option value="combined">القرآن الكريم + الدراسات الإسلامية</option><option value="tajweed">التجويد</option><option value="life">المهارات الحياتية</option></select></label><label for="noorSection">الشعبة <select id="noorSection"></select></label></div><div class="no-print noor-view-switch" role="group" aria-label="طريقة عرض نتائج الطلاب"><button type="button" id="noorDetailed" class="active" aria-pressed="true">الكشف الموزّع</button><button type="button" id="noorCompact" aria-pressed="false">الكشف المختصر</button></div><div class="no-print"><button type="button" id="noorCsv">تنزيل نتائج الطلاب CSV لبرنامج Excel</button><button type="button" id="noorPrint">طباعة النتائج</button></div><div id="noorResultsBody"></div></section><section id="combined" class="hide">
 <h3>الدراسات الإسلامية + القرآن الكريم</h3>
 <p class="muted">هذا التقرير يجمع الدراسات الإسلامية مع القرآن الكريم فقط، ليكون المجموع ١٠٠ في كل فترة.</p>
 <div id="combinedBody"></div>
@@ -190,7 +191,7 @@ removeLifeOutsideLifeSections();function renderScope(){removeStrayOsamaIslamic()
  const subject=$('subjectSelect'),section=$('sectionSelect');
  const area=localStorage.getItem('quran-main-area')||'study';
  section.replaceChildren();
- const shownSections=db.activeSubject==='life'&&area!=='students'?db.sections.filter(isLifeSection):db.sections;
+ const shownSections=db.activeSubject==='life'&&area!=='students'&&area!=='results'?db.sections.filter(isLifeSection):db.sections;
  shownSections.forEach(name=>{const opt=e('option',name);opt.value=name;section.append(opt)});
  if(!shownSections.includes(db.activeSection))db.activeSection=shownSections[0]||db.sections[0];
  section.value=db.activeSection;
@@ -199,7 +200,7 @@ removeLifeOutsideLifeSections();function renderScope(){removeStrayOsamaIslamic()
  if(subjectLabel)subjectLabel.style.display=(area==='students'||area==='dashboard')?'none':'inline-block';
 
  if(area!=='students'){
-   if(db.activeSubject==='life'&&!isLifeSection(db.activeSection)){
+   if(area!=='results'&&db.activeSubject==='life'&&!isLifeSection(db.activeSection)){
      const only=db.sections.find(isLifeSection);if(only)db.activeSection=only;
      section.value=db.activeSection;
    }
@@ -225,6 +226,7 @@ else tabs={coursework:'رصد الدرجات',lifeReport:'تقرير المها�
 
 const areaKey='quran-main-area';
 let area=localStorage.getItem(areaKey)||'study';
+$('scope').classList.toggle('hide',area==='results');
 const groups={results:['noorResults'],dashboard:['dashboard'],study:['register','students','tests','review','report','calendar','coursework','combined','islamicReport','tajweedReport','lifeReport','groupAssessment'],parents:['parentPortal','parentMessages'],data:['syncDevices','backup']};
 document.querySelectorAll('#mainAreas button').forEach(b=>{
  b.classList.toggle('active',b.dataset.area===area);
@@ -732,6 +734,15 @@ function noorOtherRow(subject,t,p,student){
 function noorResults(){
  const host=$('noorResultsBody');host.replaceChildren();const t=db.view.t,p=db.view.p;
  const selector=$('noorSubject');selector.value=noorSubject;
+ const sectionSelector=$('noorSection');
+ const availableSections=noorSubject==='life'?db.sections.filter(isLifeSection):db.sections;
+ sectionSelector.replaceChildren();
+ for(const name of availableSections){const opt=e('option',name);opt.value=name;sectionSelector.append(opt)}
+ if(availableSections.length&&!availableSections.includes(db.activeSection)){
+   db.activeSection=availableSections[0];save();
+ }
+ sectionSelector.value=db.activeSection;
+ sectionSelector.onchange=()=>{db.activeSection=sectionSelector.value;ensureRosterCopies();save();noorResults()};
  selector.onchange=()=>{noorSubject=selector.value;noorResults()};
  const isCombined=noorSubject==='combined',isLife=noorSubject==='life';
  const title=isCombined?'القرآن الكريم + الدراسات الإسلامية':subjectNames[noorSubject];
